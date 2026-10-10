@@ -1,13 +1,10 @@
 """The live wallpaper. Runs inside `kitty +kitten panel --edge=background`.
 
-At rest it is a plain fresco-umber screen with nothing on it. Move the mouse
-over the empty desktop and a faint trail of matrix dots follows it and fades.
-SUPER+H brings up the home screen (clock, greeting, recent projects); it
-fades in from dots and leaves the same way.
-
-Home:  SUPER+H or `python -m jarvis say "..."` to show · SUPER+H, right-click,
-       a click on empty space, Esc or 30 s untouched to leave · click a
-       project (or 1-6) to open it on an empty workspace
+Always on screen: a quiet clock, one greeting line and your recent projects
+on light fresco parchment. Move the mouse over empty space and a faint trail
+of dots follows it and fades. Click a project to open it; right-click
+anywhere for the desktop menu. `python -m jarvis say "..."` shows a message
+in place of the greeting for a few seconds.
 """
 import json
 import os
@@ -29,7 +26,7 @@ from .grid import Grid, ansi_diff
 from .scene import build
 
 FPS = 30
-IDLE_HIDE = 30                 # home screen leaves after this long untouched
+REFRESH_EVERY = 300            # re-read projects/system this often (seconds)
 SAY_SECONDS = 8                # a `say` message stays this long
 PIDFILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jarvis-wall.pid")
 LOG = collect.CACHE / "wall.log"
@@ -38,7 +35,7 @@ MOUSE = re.compile(r"\x1b\[<(\d+);(\d+);(\d+)([Mm])")
 DOTS = "·•∙"
 MATRIX = "01"
 # a trail dot ages through these colours, then disappears
-TRAIL_COLORS = ["hot", "amber", "dim", "line", "faint"]
+TRAIL_COLORS = ["hot", "dim", "line", "faint"]
 
 
 class Fade:
@@ -91,6 +88,7 @@ class Wall:
         self.minute = -1
         self.collecting = False
         self.last_cell = (-1, -1)
+        self.next_refresh = 0.0
 
     # ── plumbing ──────────────────────────────────────────────────────────
     @staticmethod
@@ -165,7 +163,6 @@ class Wall:
         now = time.time()
         if text:
             self.say_text, self.say_until = text, now + SAY_SECONDS
-        self.hide_at = now + (SAY_SECONDS if text and not self.visible else IDLE_HIDE)
         if not self.visible:
             self.visible = True
             self.trail.clear()
@@ -173,13 +170,7 @@ class Wall:
         self.set_base(self.home(), animate=True)
 
     def hide(self):
-        if not self.visible:
-            return
-        self.visible = False
-        self.hover = None
-        self.say_text = None
-        self.regions = []
-        self.set_base(Grid(self.cols, self.rows), animate=True, speed=0.7)
+        """The wallpaper never hides; kept so old callers stay harmless."""
 
     # ── input ─────────────────────────────────────────────────────────────
     def drop_dots(self, x: int, y: int):
@@ -199,29 +190,28 @@ class Wall:
         if b & 64:                                   # wheel
             return
         if b & 32:                                   # motion
-            if not self.visible:
-                self.drop_dots(x, y)
-                return
-            self.hide_at = max(self.hide_at, time.time() + IDLE_HIDE)
             hit = next((r for r in self.regions if r.hit(x, y)), None)
+            if not hit:
+                self.drop_dots(x, y)
             new = hit.index if hit else None
             if new != self.hover:
                 self.hover = new
                 self.set_base(self.home(), animate=False)
             return
-        if not press or not self.visible:
+        if not press:
             return
-        if (b & 3) == 2:                             # right click
-            self.hide()
+        if (b & 3) == 2:                             # right click: desktop menu
+            subprocess.Popen([os.path.expanduser("~/.config/hypr/scripts/desktop-menu.sh")],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         elif (b & 3) == 0:
             hit = next((r for r in self.regions if r.hit(x, y)), None)
-            self.open_project(hit.index) if hit else self.hide()
+            if hit:
+                self.open_project(hit.index)
 
     def on_key(self, ch: str):
         if self.visible and ch in "123456":
             self.open_project(int(ch) - 1)
-        elif ch == "\x1b":
-            self.hide()
+
 
     def open_project(self, n: int):
         projects = self.state.get("projects", [])
@@ -241,7 +231,6 @@ class Wall:
                     subprocess.Popen(c, shell=True, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except (OSError, subprocess.SubprocessError):
             log_error()
-        self.hide()
 
     def read_input(self, buf: str) -> str:
         pos = 0
@@ -271,11 +260,11 @@ class Wall:
             self.fade, self.trail = None, {}
             self.base = self.home() if self.visible else Grid(self.cols, self.rows)
             self.shown = Grid(self.cols, self.rows)
-            self.write("\x1b[48;2;26;19;13m\x1b[2J")
+            self.write("\x1b[48;2;236;226;208m\x1b[2J")
             self.present(self.compose())
         if "toggle" in self.flags:
             self.flags.discard("toggle")
-            self.hide() if self.visible else self.show()
+            self.refresh_async()
 
         m = self.mtime(collect.STATE)
         if m != self.state_mtime:
@@ -306,10 +295,10 @@ class Wall:
                 del self.trail[i]
             self.present(self.compose(), only=set(self.trail) | set(dead))
 
+        if now >= self.next_refresh:
+            self.next_refresh = now + REFRESH_EVERY
+            self.refresh_async()
         if self.visible:
-            if now >= self.hide_at:
-                self.hide()
-                return
             minute = time.localtime(now).tm_min
             if minute != self.minute or (self.say_text and now >= self.say_until):
                 self.minute = minute
@@ -322,9 +311,8 @@ class Wall:
 
     def run(self, fd: int):
         # any-motion mouse tracking stays on: motion only arrives when the pointer is over the bare desktop
-        self.write("\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1003h\x1b[?1006h\x1b[48;2;26;19;13m\x1b[2J")
-        if not collect.STATE.exists():
-            self.refresh_async()
+        self.write("\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1003h\x1b[?1006h\x1b[48;2;236;226;208m\x1b[2J")
+        self.show()
         pending = ""
         while True:
             r, _, _ = select.select([fd], [], [], self.timeout())

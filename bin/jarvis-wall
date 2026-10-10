@@ -3,7 +3,7 @@
 # DepartureMono at 8.25pt = 11px, its only pixel-sharp size -> a 195x54 grid on 1366x768.
 cd "$(dirname "$0")/.." || exit 1
 exec kitty +kitten panel --edge=background --class=jarvis-wall \
-    -o background=#1a130d -o foreground=#d6c3a5 \
+    -o background=#ece2d0 -o foreground=#3d2c1f \
     -o 'font_family=DepartureMono Nerd Font' -o font_size=8.25 \
     -o background_opacity=1 -o window_padding_width=0 -o cursor_trail=0 -o mouse_hide_wait=0 \
     .venv/bin/python -m jarvis wall

@@ -1,4 +1,4 @@
-"""The home screen (SUPER+H): a quiet clock, one greeting line, and your recent
+"""The wallpaper: a quiet clock, one greeting line, and your recent
 projects as a plain clickable list. Lots of empty space; nothing else."""
 import time
 from dataclasses import dataclass
@@ -57,7 +57,7 @@ def build(state: dict, cols: int, rows: int, now: float | None = None,
     y = max(4, (rows - block_h) // 2 - 2)
 
     clock = time.strftime("%H:%M", lt)
-    bf.draw(g, (cols - bf.width(clock)) // 2, y, clock, "amber")
+    bf.draw(g, (cols - bf.width(clock)) // 2, y, clock, "dim")
     y += bf.height + 2
 
     line = say or f"{time.strftime('%A %d %B', lt)}  ·  {greeting(state.get('user', ''), lt.tm_hour)}"
@@ -70,9 +70,9 @@ def build(state: dict, cols: int, rows: int, now: float | None = None,
         when = p["claude_ago"] or p["commit_ago"]
         detail = p["branch"] + (f" · {p['dirty']} changed" if p["dirty"] else "")
         g.text(x0, y, "›" if on else " ", "hot")
-        g.text(x0 + 3, y, p["name"].title(), "amber" if on else "dim", width=30)
-        g.text(x0 + 36, y, detail, "dim" if on else "line", width=32)
-        g.text(x0 + LIST_W - len(when), y, when, "dim" if on else "line")
+        g.text(x0 + 3, y, p["name"].title(), "hot" if on else "amber", width=30)
+        g.text(x0 + 36, y, detail, "dim", width=32)
+        g.text(x0 + LIST_W - len(when), y, when, "dim")
         regions.append(Region(x0, y, x0 + LIST_W - 1, y, "project", n))
         y += 2
     return g, regions

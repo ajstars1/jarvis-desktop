@@ -2,15 +2,15 @@
 wallpaper in kitty, and a PNG for previews."""
 
 PALETTE = {
-    # fresco palette, taken from the old ceiling-painting wallpaper
-    "bg": (0x1A, 0x13, 0x0D),        # deep umber: the whole wallpaper at rest
-    "faint": (0x2A, 0x1F, 0x16),
-    "surface": (0x2F, 0x21, 0x16),
-    "line": (0x44, 0x3B, 0x2B),
-    "dim": (0x86, 0x6C, 0x52),
-    "amber": (0xD6, 0xC3, 0xA5),     # cream text (key kept for compatibility)
-    "hot": (0xC9, 0xA2, 0x6B),       # ochre gold accent
-    "alert": (0xB8, 0x61, 0x3D),     # terracotta
+    # fresco light palette, from the old ceiling-painting wallpaper
+    "bg": (0xEC, 0xE2, 0xD0),        # parchment: the wallpaper itself
+    "faint": (0xE2, 0xD6, 0xC1),
+    "surface": (0xE2, 0xD4, 0xBD),
+    "line": (0xCD, 0xB9, 0x9B),
+    "dim": (0x8F, 0x77, 0x59),
+    "amber": (0x3D, 0x2C, 0x1F),     # deep umber text (key kept for compatibility)
+    "hot": (0xA7, 0x78, 0x3F),       # ochre accent
+    "alert": (0xA9, 0x53, 0x2F),     # terracotta
 }
 SGR_FG = {k: f"\x1b[38;2;{r};{g};{b}m" for k, (r, g, b) in PALETTE.items()}
 SGR_BG = {k: f"\x1b[48;2;{r};{g};{b}m" for k, (r, g, b) in PALETTE.items()}
