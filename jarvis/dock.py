@@ -65,6 +65,7 @@ window.dock-window { background: transparent; }
 .dock-item image { transition: transform 140ms ease-out; }
 .dock-item:hover image { transform: scale(1.16) translateY(-3px); }
 .dock-item:hover { background: transparent; }
+.apps-icon { color: #3d2c1f; }
 .dot { min-width: 5px; min-height: 5px; border-radius: 3px; background: #2b2019; margin-top: 3px; }
 .dot.off { background: transparent; }
 .divider { background: #cdb99b; min-width: 1px; margin: 8px 6px 10px 6px; }
@@ -237,6 +238,7 @@ class Dock(Gtk.Application):
         size = self.cfg["icon_size"]
         if app_id == LAUNCHPAD:
             img = Gtk.Image.new_from_icon_name("view-app-grid-symbolic")
+            img.add_css_class("apps-icon")
             name = "Apps"
         else:
             app = self.apps.get(app_id)
