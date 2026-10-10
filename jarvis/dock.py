@@ -1,0 +1,592 @@
+#!/usr/bin/env python3
+"""AJSTARS dock: an Apple-style dock for Hyprland, in GTK4 + gtk4-layer-shell.
+
+- hides itself and slides up when the mouse touches the bottom edge
+- one icon per app: pinned apps get a dot when running, unpinned running
+  apps appear after a divider (no duplicate icons)
+- click: open the app, or bring its window forward (cycles if several;
+  restores minimized ones)
+- right-click: its windows, New Window, Maximize, Keep in Dock / Remove,
+  Quit, Dock Settings…
+- Dock Settings: pick, order and remove apps, icon size, auto-hide
+
+Settings live in ~/.config/jarvis/dock.json. Runs with the system python3
+(python3-gi); bin/jarvis-dock preloads libgtk4-layer-shell as GTK requires.
+"""
+import json
+import os
+import socket
+import subprocess
+import sys
+import threading
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+
+try:
+    gi.require_version("GioUnix", "2.0")
+    from gi.repository import GioUnix  # noqa: E402
+    DesktopAppInfo = GioUnix.DesktopAppInfo
+except (ValueError, ImportError):
+    DesktopAppInfo = Gio.DesktopAppInfo
+
+try:
+    gi.require_version("Gtk4LayerShell", "1.0")
+    from gi.repository import Gtk4LayerShell as LS  # noqa: E402
+except (ValueError, ImportError):
+    LS = None
+
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "jarvis" / "dock.json"
+LAUNCHPAD = "launchpad"
+DEFAULTS = {
+    "pinned": [LAUNCHPAD, "org.gnome.Nautilus.desktop", "google-chrome.desktop", "kitty.desktop",
+               "cursor.desktop", "code.desktop", "blender_blender.desktop", "discord.desktop"],
+    "autohide": True,
+    "icon_size": 44,
+    "show_unpinned": True,
+}
+MARGIN = 8            # gap between dock and screen edge when shown
+SLIDE_MS = 180
+
+CSS = """
+window.dock-window, window.dock-hotspot { background: transparent; }
+.dock {
+    background: rgba(243, 235, 222, 0.97);
+    border: 1px solid #cdb99b;
+    border-radius: 20px;
+    padding: 6px 10px 4px 10px;
+}
+.dock-item { background: transparent; border: none; box-shadow: none; padding: 2px 4px; min-width: 0; }
+.dock-item image { transition: transform 140ms ease-out; }
+.dock-item:hover image { transform: scale(1.16) translateY(-3px); }
+.dock-item:hover { background: transparent; }
+.dot { min-width: 5px; min-height: 5px; border-radius: 3px; background: #2b2019; margin-top: 3px; }
+.dot.off { background: transparent; }
+.divider { background: #cdb99b; min-width: 1px; margin: 8px 6px 10px 6px; }
+popover > contents { background: #f3ebde; border: 1px solid #cdb99b; border-radius: 12px; padding: 6px; }
+popover label, popover button { color: #3d2c1f; }
+popover button { background: transparent; border: none; box-shadow: none; padding: 6px 10px; border-radius: 8px; }
+popover button:hover { background: #e2d4bd; }
+popover .title { font-weight: bold; padding: 4px 10px 6px 10px; }
+popover separator { background: #cdb99b; margin: 4px 6px; }
+window.dock-settings, window.dock-settings > * { background: #ece2d0; color: #3d2c1f; }
+.dock-settings label { color: #3d2c1f; }
+.dock-settings .heading { font-weight: bold; margin-top: 8px; }
+.dock-settings list, .dock-settings row { background: #f3ebde; color: #3d2c1f; }
+.dock-settings button { color: #3d2c1f; }
+"""
+
+
+# ── config ───────────────────────────────────────────────────────────────
+def load_config() -> dict:
+    try:
+        cfg = json.loads(CONFIG.read_text())
+    except (OSError, json.JSONDecodeError):
+        cfg = {}
+    return {**DEFAULTS, **cfg}
+
+
+def save_config(cfg: dict):
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CONFIG.with_suffix(".tmp")
+    tmp.write_text(json.dumps(cfg, indent=2))
+    os.replace(tmp, CONFIG)
+
+
+# ── hyprland ─────────────────────────────────────────────────────────────
+def hypr(*args) -> str:
+    try:
+        return subprocess.run(["hyprctl", *args], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def clients() -> list[dict]:
+    try:
+        return [c for c in json.loads(hypr("clients", "-j") or "[]") if c.get("mapped", True) and c.get("class")]
+    except json.JSONDecodeError:
+        return []
+
+
+def focus_window(c: dict):
+    addr = c["address"]
+    if c["workspace"]["name"] == "special:minimized":
+        ws = json.loads(hypr("activeworkspace", "-j") or '{"id": 1}')["id"]
+        hypr("dispatch", "movetoworkspacesilent", f"{ws},address:{addr}")
+    hypr("dispatch", "focuswindow", f"address:{addr}")
+    hypr("dispatch", "alterzorder", f"top,address:{addr}")
+
+
+# ── apps ─────────────────────────────────────────────────────────────────
+class Apps:
+    """Maps Hyprland window classes to installed .desktop apps."""
+
+    def __init__(self):
+        self.all = [a for a in Gio.AppInfo.get_all() if isinstance(a, DesktopAppInfo)]
+        self.cache: dict = {}
+
+    def get(self, app_id: str):
+        try:
+            return DesktopAppInfo.new(app_id)
+        except TypeError:
+            return None
+
+    def for_class(self, cls: str):
+        if cls in self.cache:
+            return self.cache[cls]
+        c = cls.lower()
+        found = None
+        for a in self.all:
+            wm = (a.get_startup_wm_class() or "").lower()
+            aid = a.get_id().lower().removesuffix(".desktop")
+            exe = os.path.basename(a.get_executable() or "").lower()
+            if c in (wm, aid, exe) or aid.endswith("." + c) or aid.split("_")[0] == c:
+                found = a
+                break
+        self.cache[cls] = found
+        return found
+
+
+# ── dock ─────────────────────────────────────────────────────────────────
+class Dock(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="dev.ajstars.dock", flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        self.cfg = load_config()
+        self.apps = Apps()
+        self.win = None
+        self.items: dict[str, tuple[Gtk.Widget, Gtk.Widget]] = {}   # app id -> (button, dot)
+        self.running: dict[str, list[dict]] = {}
+        self.margin = MARGIN
+        self.target = MARGIN
+        self.anim = 0
+        self.hide_timer = 0
+        self.popover_open = False
+        self.settings_win = None
+        self.refresh_pending = False
+
+    # startup / command line
+    def do_command_line(self, cmd):
+        args = cmd.get_arguments()[1:]
+        if self.win is None:
+            self.build()
+        if "--settings" in args:
+            self.open_settings()
+        return 0
+
+    def build(self):
+        prov = Gtk.CssProvider()
+        prov.load_from_string(CSS)
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        self.win = Gtk.Window(application=self)
+        self.win.add_css_class("dock-window")
+        self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        self.box.add_css_class("dock")
+        self.win.set_child(self.box)
+        motion = Gtk.EventControllerMotion()
+        motion.connect("enter", lambda *_: self.show_dock())
+        motion.connect("leave", lambda *_: self.schedule_hide())
+        self.win.add_controller(motion)
+
+        if LS:
+            LS.init_for_window(self.win)
+            LS.set_namespace(self.win, "jarvis-dock")
+            LS.set_layer(self.win, LS.Layer.TOP)
+            LS.set_anchor(self.win, LS.Edge.BOTTOM, True)
+            LS.set_keyboard_mode(self.win, LS.KeyboardMode.ON_DEMAND)
+            self.hotspot = Gtk.Window(application=self)
+            self.hotspot.add_css_class("dock-hotspot")
+            self.hotspot.set_child(Gtk.Box(height_request=2))
+            LS.init_for_window(self.hotspot)
+            LS.set_namespace(self.hotspot, "jarvis-dock-hotspot")
+            LS.set_layer(self.hotspot, LS.Layer.TOP)
+            for e in (LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
+                LS.set_anchor(self.hotspot, e, True)
+            LS.set_exclusive_zone(self.hotspot, 0)
+            hm = Gtk.EventControllerMotion()
+            hm.connect("enter", lambda *_: self.show_dock())
+            self.hotspot.add_controller(hm)
+        self.populate()
+        self.apply_autohide()
+        self.win.present()
+        if LS:
+            self.hotspot.present()
+        self.refresh_running()
+        threading.Thread(target=self.listen, daemon=True).start()
+        if self.cfg["autohide"]:
+            self.schedule_hide(1500)
+
+    # items
+    def populate(self):
+        child = self.box.get_first_child()
+        while child:
+            nxt = child.get_next_sibling()
+            self.box.remove(child)
+            child = nxt
+        self.items.clear()
+        for app_id in self.cfg["pinned"]:
+            self.add_item(app_id, pinned=True)
+        if self.cfg["show_unpinned"]:
+            extra = [a for a in self.running if a not in self.cfg["pinned"]]
+            if extra:
+                div = Gtk.Box()
+                div.add_css_class("divider")
+                self.box.append(div)
+                for app_id in extra:
+                    self.add_item(app_id, pinned=False)
+        self.update_dots()
+
+    def add_item(self, app_id: str, pinned: bool):
+        size = self.cfg["icon_size"]
+        if app_id == LAUNCHPAD:
+            img = Gtk.Image.new_from_icon_name("view-app-grid-symbolic")
+            name = "Apps"
+        else:
+            app = self.apps.get(app_id)
+            if app is None:
+                return
+            img = Gtk.Image.new_from_gicon(app.get_icon()) if app.get_icon() else Gtk.Image.new_from_icon_name("application-x-executable")
+            name = app.get_display_name()
+        img.set_pixel_size(size)
+        dot = Gtk.Box(halign=Gtk.Align.CENTER)
+        dot.add_css_class("dot")
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        col.append(img)
+        col.append(dot)
+        btn = Gtk.Button(child=col, tooltip_text=name)
+        btn.add_css_class("dock-item")
+        btn.connect("clicked", lambda *_: self.on_click(app_id))
+        rc = Gtk.GestureClick(button=3)
+        rc.connect("pressed", lambda *_: self.on_menu(app_id, btn, pinned))
+        btn.add_controller(rc)
+        self.box.append(btn)
+        self.items[app_id] = (btn, dot)
+
+    def update_dots(self):
+        for app_id, (_, dot) in self.items.items():
+            if self.running.get(app_id):
+                dot.remove_css_class("off")
+            else:
+                dot.add_css_class("off")
+
+    # running windows
+    def refresh_running(self):
+        self.refresh_pending = False
+        running: dict[str, list[dict]] = {}
+        for c in clients():
+            if c["class"] in ("jarvis-wall",):
+                continue
+            app = self.apps.for_class(c["class"])
+            key = app.get_id() if app else None
+            if key:
+                running.setdefault(key, []).append(c)
+        changed_set = set(running) != set(self.running)
+        self.running = running
+        if changed_set and self.cfg["show_unpinned"]:
+            self.populate()
+        else:
+            self.update_dots()
+        return False
+
+    def listen(self):
+        """Hyprland's event socket: refresh the dots when windows open, close or move."""
+        try:
+            path = os.path.join(os.environ["XDG_RUNTIME_DIR"], "hypr", os.environ["HYPRLAND_INSTANCE_SIGNATURE"], ".socket2.sock")
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.connect(path)
+        except (KeyError, OSError):
+            GLib.timeout_add_seconds(2, lambda: (self.refresh_running(), True)[1])
+            return
+        buf = b""
+        while True:
+            data = s.recv(4096)
+            if not data:
+                return
+            buf += data
+            *lines, buf = buf.split(b"\n")
+            if any(ln.startswith((b"openwindow", b"closewindow", b"movewindow", b"windowtitle")) for ln in lines):
+                if not self.refresh_pending:
+                    self.refresh_pending = True
+                    GLib.timeout_add(120, self.refresh_running)
+
+    # clicks
+    def launch(self, app_id: str):
+        if app_id == LAUNCHPAD:
+            subprocess.Popen(["rofi", "-show", "drun", "-theme", "drawer"], start_new_session=True)
+            return
+        app = self.apps.get(app_id)
+        if app:
+            app.launch([], Gdk.Display.get_default().get_app_launch_context())
+
+    def on_click(self, app_id: str):
+        wins = sorted(self.running.get(app_id, []), key=lambda c: c.get("focusHistoryID", 0))
+        if not wins:
+            self.launch(app_id)
+            return
+        active = json.loads(hypr("activewindow", "-j") or "{}").get("address")
+        if len(wins) > 1 and any(w["address"] == active for w in wins):
+            focus_window(wins[-1])          # cycle to the least recently used one
+        else:
+            focus_window(wins[0])
+
+    def on_menu(self, app_id: str, btn: Gtk.Widget, pinned: bool):
+        pop = Gtk.Popover(has_arrow=True, position=Gtk.PositionType.TOP)
+        pop.set_parent(btn)
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        pop.set_child(col)
+
+        def item(label, fn):
+            b = Gtk.Button(label=label, halign=Gtk.Align.FILL)
+            b.get_child().set_xalign(0)
+            b.connect("clicked", lambda *_: (pop.popdown(), fn()))
+            col.append(b)
+
+        name = "Apps" if app_id == LAUNCHPAD else (self.apps.get(app_id).get_display_name() if self.apps.get(app_id) else app_id)
+        title = Gtk.Label(label=name, xalign=0)
+        title.add_css_class("title")
+        col.append(title)
+        wins = self.running.get(app_id, [])
+        for w in wins[:8]:
+            t = (w.get("title") or name)[:42]
+            mark = "  (minimized)" if w["workspace"]["name"] == "special:minimized" else ""
+            item(t + mark, lambda w=w: focus_window(w))
+        if wins:
+            col.append(Gtk.Separator())
+        if app_id != LAUNCHPAD:
+            item("New Window", lambda: self.launch(app_id))
+        if wins:
+            item("Maximize", lambda: (focus_window(wins[0]), hypr("dispatch", "fullscreen", "1")))
+        if app_id != LAUNCHPAD:
+            if pinned:
+                item("Remove from Dock", lambda: self.set_pinned(app_id, False))
+            else:
+                item("Keep in Dock", lambda: self.set_pinned(app_id, True))
+        if wins:
+            item("Quit", lambda: [hypr("dispatch", "closewindow", f"address:{w['address']}") for w in wins])
+        col.append(Gtk.Separator())
+        item("Dock Settings…", self.open_settings)
+
+        self.popover_open = True
+
+        def closed(*_):
+            self.popover_open = False
+            GLib.idle_add(lambda: pop.unparent())
+            self.schedule_hide()
+
+        pop.connect("closed", closed)
+        pop.popup()
+
+    def set_pinned(self, app_id: str, keep: bool):
+        pinned = [a for a in self.cfg["pinned"] if a != app_id]
+        if keep:
+            pinned.append(app_id)
+        self.cfg["pinned"] = pinned
+        save_config(self.cfg)
+        self.populate()
+        if self.settings_win:
+            self.fill_settings()
+
+    # auto-hide
+    def apply_autohide(self):
+        if not LS:
+            return
+        if self.cfg["autohide"]:
+            LS.set_exclusive_zone(self.win, 0)
+        else:
+            LS.auto_exclusive_zone_enable(self.win)
+            self.slide_to(MARGIN)
+
+    def hidden_margin(self) -> int:
+        h = self.win.get_height() or (self.cfg["icon_size"] + 30)
+        return -(h + 4)
+
+    def show_dock(self):
+        if self.hide_timer:
+            GLib.source_remove(self.hide_timer)
+            self.hide_timer = 0
+        self.slide_to(MARGIN)
+
+    def schedule_hide(self, delay: int = 700):
+        if not self.cfg["autohide"] or not LS:
+            return
+        if self.hide_timer:
+            GLib.source_remove(self.hide_timer)
+
+        def go():
+            self.hide_timer = 0
+            if not self.popover_open:
+                self.slide_to(self.hidden_margin())
+            return False
+
+        self.hide_timer = GLib.timeout_add(delay, go)
+
+    def slide_to(self, target: int):
+        if not LS:
+            return
+        self.target = target
+        if self.anim:
+            return
+        start, t0 = self.margin, GLib.get_monotonic_time()
+
+        def step():
+            t = min(1.0, (GLib.get_monotonic_time() - t0) / 1000 / SLIDE_MS)
+            ease = 1 - (1 - t) ** 3
+            self.margin = round(start + (self.target - start) * ease)
+            LS.set_margin(self.win, LS.Edge.BOTTOM, self.margin)
+            if t >= 1.0 or self.margin == self.target:
+                self.anim = 0
+                if self.margin != self.target:
+                    self.slide_to(self.target)
+                return False
+            return True
+
+        self.anim = GLib.timeout_add(16, step)
+
+    # settings window
+    def open_settings(self):
+        if self.settings_win:
+            self.settings_win.present()
+            return
+        w = Gtk.Window(application=self, title="Dock Settings", default_width=420, default_height=560)
+        w.add_css_class("dock-settings")
+        w.connect("close-request", lambda *_: setattr(self, "settings_win", None) or False)
+        self.settings_win = w
+        self.settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10,
+                                    margin_top=16, margin_bottom=16, margin_start=16, margin_end=16)
+        scroller = Gtk.ScrolledWindow(vexpand=True)
+        scroller.set_child(self.settings_box)
+        w.set_child(scroller)
+        self.fill_settings()
+        w.present()
+
+    def fill_settings(self):
+        b = self.settings_box
+        child = b.get_first_child()
+        while child:
+            nxt = child.get_next_sibling()
+            b.remove(child)
+            child = nxt
+
+        def switch_row(label, key):
+            row = Gtk.Box(spacing=12)
+            row.append(Gtk.Label(label=label, xalign=0, hexpand=True))
+            sw = Gtk.Switch(active=self.cfg[key], valign=Gtk.Align.CENTER)
+
+            def changed(s, _):
+                self.cfg[key] = s.get_active()
+                save_config(self.cfg)
+                if key == "autohide":
+                    self.apply_autohide()
+                    self.show_dock()
+                else:
+                    self.populate()
+
+            sw.connect("notify::active", changed)
+            row.append(sw)
+            b.append(row)
+
+        switch_row("Hide the dock automatically", "autohide")
+        switch_row("Show open apps that aren't in the dock", "show_unpinned")
+
+        row = Gtk.Box(spacing=12)
+        row.append(Gtk.Label(label="Icon size", xalign=0))
+        scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 32, 64, 2)
+        scale.set_value(self.cfg["icon_size"])
+        scale.set_hexpand(True)
+
+        def resized(s):
+            self.cfg["icon_size"] = int(s.get_value())
+            save_config(self.cfg)
+            self.populate()
+
+        scale.connect("value-changed", resized)
+        row.append(scale)
+        b.append(row)
+
+        head = Gtk.Label(label="Apps in the dock (left to right)", xalign=0)
+        head.add_css_class("heading")
+        b.append(head)
+        lst = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        for i, app_id in enumerate(self.cfg["pinned"]):
+            r = Gtk.Box(spacing=8, margin_top=4, margin_bottom=4, margin_start=6, margin_end=6)
+            if app_id == LAUNCHPAD:
+                img, name = Gtk.Image.new_from_icon_name("view-app-grid-symbolic"), "Apps (all apps grid)"
+            else:
+                app = self.apps.get(app_id)
+                if app is None:
+                    continue
+                img, name = Gtk.Image.new_from_gicon(app.get_icon()), app.get_display_name()
+            img.set_pixel_size(24)
+            r.append(img)
+            r.append(Gtk.Label(label=name, xalign=0, hexpand=True))
+            for label, delta in (("↑", -1), ("↓", 1)):
+                mv = Gtk.Button(label=label, has_frame=False)
+                mv.connect("clicked", lambda *_, i=i, d=delta: self.move_pinned(i, d))
+                r.append(mv)
+            rm = Gtk.Button(label="✕", has_frame=False, tooltip_text="Remove from Dock")
+            rm.connect("clicked", lambda *_, a=app_id: self.set_pinned(a, False))
+            r.append(rm)
+            lst.append(r)
+        b.append(lst)
+
+        add = Gtk.Button(label="Add an app…")
+        add.connect("clicked", lambda *_: self.open_app_picker())
+        b.append(add)
+
+    def move_pinned(self, i: int, delta: int):
+        p = self.cfg["pinned"]
+        j = i + delta
+        if 0 <= j < len(p):
+            p[i], p[j] = p[j], p[i]
+            save_config(self.cfg)
+            self.populate()
+            self.fill_settings()
+
+    def open_app_picker(self):
+        w = Gtk.Window(application=self, title="Add to Dock", default_width=380, default_height=520)
+        w.add_css_class("dock-settings")
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        search = Gtk.SearchEntry(placeholder_text="Search apps")
+        col.append(search)
+        lst = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        apps = sorted((a for a in self.apps.all if a.should_show() and a.get_id() not in self.cfg["pinned"]),
+                      key=lambda a: a.get_display_name().lower())
+        rows = []
+        for a in apps:
+            r = Gtk.Box(spacing=8, margin_top=3, margin_bottom=3, margin_start=6, margin_end=6)
+            img = Gtk.Image.new_from_gicon(a.get_icon()) if a.get_icon() else Gtk.Image()
+            img.set_pixel_size(24)
+            r.append(img)
+            r.append(Gtk.Label(label=a.get_display_name(), xalign=0, hexpand=True))
+            btn = Gtk.Button(label="Add", has_frame=False)
+            btn.connect("clicked", lambda *_, a=a: (self.set_pinned(a.get_id(), True), w.close()))
+            r.append(btn)
+            lst.append(r)
+            rows.append((a.get_display_name().lower(), r.get_parent()))
+
+        def filt(entry):
+            q = entry.get_text().lower()
+            for n, row in rows:
+                row.set_visible(q in n)
+
+        search.connect("search-changed", filt)
+        sc = Gtk.ScrolledWindow(vexpand=True)
+        sc.set_child(lst)
+        col.append(sc)
+        w.set_child(col)
+        w.present()
+
+
+def main() -> int:
+    if LS is None and "--window" not in sys.argv:
+        print("jarvis-dock: gtk4-layer-shell is missing (sudo apt install gir1.2-gtk4layershell-1.0)", file=sys.stderr)
+        return 1
+    return Dock().run([a for a in sys.argv if a != "--window"])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

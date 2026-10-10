@@ -1,0 +1,5 @@
+#!/bin/sh
+# The dock. gtk4-layer-shell must load before libwayland-client, hence the preload.
+LIB=/usr/lib/x86_64-linux-gnu/libgtk4-layer-shell.so.0
+[ -f "$LIB" ] && export LD_PRELOAD="$LIB${LD_PRELOAD:+:$LD_PRELOAD}"
+exec /usr/bin/python3 "$(dirname "$(readlink -f "$0")")/../jarvis/dock.py" "$@"
