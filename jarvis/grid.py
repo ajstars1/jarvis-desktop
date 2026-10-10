@@ -2,14 +2,15 @@
 wallpaper in kitty, and a PNG for previews."""
 
 PALETTE = {
-    "bg": (0x00, 0x00, 0x00),       # pure black: the wallpaper is empty until summoned
-    "faint": (0x24, 0x18, 0x00),
-    "surface": (0x1C, 0x12, 0x00),
-    "line": (0x3D, 0x29, 0x00),
-    "dim": (0x7A, 0x52, 0x00),
-    "amber": (0xFF, 0xB0, 0x00),
-    "hot": (0xFF, 0xD2, 0x7A),
-    "alert": (0xFF, 0x5F, 0x1F),
+    # fresco palette, taken from the old ceiling-painting wallpaper
+    "bg": (0x1A, 0x13, 0x0D),        # deep umber: the whole wallpaper at rest
+    "faint": (0x2A, 0x1F, 0x16),
+    "surface": (0x2F, 0x21, 0x16),
+    "line": (0x44, 0x3B, 0x2B),
+    "dim": (0x86, 0x6C, 0x52),
+    "amber": (0xD6, 0xC3, 0xA5),     # cream text (key kept for compatibility)
+    "hot": (0xC9, 0xA2, 0x6B),       # ochre gold accent
+    "alert": (0xB8, 0x61, 0x3D),     # terracotta
 }
 SGR_FG = {k: f"\x1b[38;2;{r};{g};{b}m" for k, (r, g, b) in PALETTE.items()}
 SGR_BG = {k: f"\x1b[48;2;{r};{g};{b}m" for k, (r, g, b) in PALETTE.items()}

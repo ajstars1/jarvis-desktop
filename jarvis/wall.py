@@ -1,12 +1,13 @@
 """The live wallpaper. Runs inside `kitty +kitten panel --edge=background`.
 
-Default state is a pure black, empty screen. It materializes out of thin air
-when summoned: dots appear, scramble through fragments of your own code, and
-lock into place. It vanishes the same way.
+At rest it is a plain fresco-umber screen with nothing on it. Move the mouse
+over the empty desktop and a faint trail of matrix dots follows it and fades.
+SUPER+H brings up the home screen (clock, greeting, recent projects); it
+fades in from dots and leaves the same way.
 
-Summon:  click empty desktop · SUPER+H (SIGUSR1) · `python -m jarvis say "..."`
-Vanish:  right-click · SUPER+H again · 45 s without the mouse over it
-Inside:  click a project tile to open it · click BYTE to hear it again
+Home:  SUPER+H or `python -m jarvis say "..."` to show · SUPER+H, right-click,
+       a click on empty space, Esc or 30 s untouched to leave · click a
+       project (or 1-6) to open it on an empty workspace
 """
 import json
 import os
@@ -28,53 +29,42 @@ from .grid import Grid, ansi_diff
 from .scene import build
 
 FPS = 30
-GREET_SECONDS = 12      # login greeting stays this long, then fades to black
-IDLE_HIDE = 45          # vanish after this long with no mouse movement over it
+IDLE_HIDE = 30                 # home screen leaves after this long untouched
+SAY_SECONDS = 8                # a `say` message stays this long
 PIDFILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jarvis-wall.pid")
 LOG = collect.CACHE / "wall.log"
 
 MOUSE = re.compile(r"\x1b\[<(\d+);(\d+);(\d+)([Mm])")
-GLYPHS = "01·:;+*=<>/\\|#%&$@!?{}[]()_-~^"
-DOT_GLYPHS = "·•▪"
-BLOCKS = set("▀▄█")
+DOTS = "·•∙"
+MATRIX = "01"
+# a trail dot ages through these colours, then disappears
+TRAIL_COLORS = ["hot", "amber", "dim", "line", "faint"]
 
 
-class Transition:
-    """Cell-by-cell materialize/dissolve between two frames:
-    a dot appears, it scrambles through glyphs, then locks with a hot flash."""
+class Fade:
+    """Home screen in/out: each changed cell flickers as a dot, then settles."""
 
-    def __init__(self, src: Grid, dst: Grid, tokens: list[str], rng: random.Random, speed: float = 1.0):
+    def __init__(self, src: Grid, dst: Grid, rng: random.Random, speed: float = 1.0):
         self.dst = dst
         self.rng = rng
-        self.pool = ("".join(tokens)[:3000] + GLYPHS) or GLYPHS
-        self.plan: dict[int, tuple[float, float, float]] = {}
+        self.plan: dict[int, tuple[float, float]] = {}
         cols = dst.cols
         for i in range(len(dst.ch)):
             if src.ch[i] == dst.ch[i] and src.fg[i] == dst.fg[i] and src.bg[i] == dst.bg[i]:
                 continue
-            t0 = ((i % cols) / cols * 0.35 + rng.random() * 0.45) * speed
-            t1 = t0 + (0.06 + rng.random() * 0.10) * speed
-            t2 = t1 + (0.12 + rng.random() * 0.40) * speed
-            self.plan[i] = (t0, t1, t2)
-        self.end = max((p[2] for p in self.plan.values()), default=0.0) + 0.14
+            t0 = ((i % cols) / cols * 0.2 + rng.random() * 0.25) * speed
+            self.plan[i] = (t0, t0 + (0.10 + rng.random() * 0.20) * speed)
+        self.end = max((p[1] for p in self.plan.values()), default=0.0)
 
     def apply(self, t: float, out: Grid, src: Grid):
         rnd = self.rng.random
-        pool, npool = self.pool, len(self.pool)
-        for i, (t0, t1, t2) in self.plan.items():
+        for i, (t0, t1) in self.plan.items():
             if t < t0:
                 out.ch[i], out.fg[i], out.bg[i] = src.ch[i], src.fg[i], src.bg[i]
             elif t < t1:
-                out.ch[i], out.fg[i], out.bg[i] = DOT_GLYPHS[int(rnd() * 3)], "dim", "bg"
-            elif t < t2:
-                blocky = self.dst.ch[i] in BLOCKS or src.ch[i] in BLOCKS
-                out.ch[i] = DOT_GLYPHS[int(rnd() * 3)] if blocky else pool[int(rnd() * npool)]
-                out.fg[i] = "amber" if rnd() < 0.25 else "dim"
-                out.bg[i] = "bg"
+                out.ch[i], out.fg[i], out.bg[i] = DOTS[int(rnd() * 3)], "line" if rnd() < 0.6 else "dim", "bg"
             else:
-                out.ch[i], out.bg[i] = self.dst.ch[i], self.dst.bg[i]
-                fresh = t < t2 + 0.12 and self.dst.ch[i] != " "
-                out.fg[i] = "hot" if fresh else self.dst.fg[i]
+                out.ch[i], out.fg[i], out.bg[i] = self.dst.ch[i], self.dst.fg[i], self.dst.bg[i]
 
 
 class Wall:
@@ -83,24 +73,24 @@ class Wall:
         self.flags: set[str] = set()
         self.rng = random.Random()
         self.cols, self.rows = self.size()
-        self.blank = Grid(self.cols, self.rows)
-        self.shown = self.blank.copy()          # what is on screen right now
+        self.base = Grid(self.cols, self.rows)     # what sits under the trail
+        self.shown = self.base.copy()              # what is on screen
         self.visible = False
-        self.trans: Transition | None = None
-        self.trans_src: Grid | None = None
-        self.trans_t0 = 0.0
+        self.fade: Fade | None = None
+        self.fade_src: Grid | None = None
+        self.fade_t0 = 0.0
+        self.trail: dict[int, tuple[str, float, float]] = {}   # cell -> (char, born, life)
         self.state = self.load_state()
         self.state_mtime = self.mtime(collect.STATE)
         self.inbox_mtime = self.mtime(collect.INBOX)
         self.regions = []
         self.hover: int | None = None
         self.say_text: str | None = None
-        self.talk_until = 0.0
+        self.say_until = 0.0
         self.hide_at = 0.0
-        self.next_blink = time.time() + 5
-        self.blink_until = 0.0
         self.minute = -1
         self.collecting = False
+        self.last_cell = (-1, -1)
 
     # ── plumbing ──────────────────────────────────────────────────────────
     @staticmethod
@@ -126,11 +116,7 @@ class Wall:
             self.out.write(s.encode())
             self.out.flush()
 
-    def mouse_mode(self, motion: bool):
-        self.write("\x1b[?1003h" if motion else "\x1b[?1003l")
-
     def refresh_async(self):
-        """Run the collector off the UI thread; the state.json watcher picks up the result."""
         if self.collecting:
             return
         self.collecting = True
@@ -146,40 +132,45 @@ class Wall:
         threading.Thread(target=work, daemon=True).start()
 
     # ── frames ────────────────────────────────────────────────────────────
-    def target(self) -> Grid:
-        now = time.time()
-        talking = now < self.talk_until
-        mouth = ("talk" if int(now * 6) % 2 else "smile") if talking else "smile"
-        eyes = "blink" if now < self.blink_until else None
-        g, self.regions = build(self.state, self.cols, self.rows, now, self.hover, eyes, mouth,
-                                self.say_text if (self.say_text and now < self.hide_at) else None)
+    def home(self) -> Grid:
+        say = self.say_text if time.time() < self.say_until else None
+        g, self.regions = build(self.state, self.cols, self.rows, time.time(), self.hover, say)
         return g
 
-    def start(self, dst: Grid, speed: float = 1.0):
-        self.trans_src = self.shown.copy()
-        self.trans = Transition(self.trans_src, dst, self.state.get("tokens", []), self.rng, speed)
-        self.trans_t0 = time.time()
+    def compose(self) -> Grid:
+        """base + live trail dots."""
+        g = self.base.copy()
+        now = time.time()
+        for i, (ch, born, life) in self.trail.items():
+            k = min(len(TRAIL_COLORS) - 1, int((now - born) / life * len(TRAIL_COLORS)))
+            if g.ch[i] == " ":
+                g.ch[i], g.fg[i] = ch, TRAIL_COLORS[k]
+        return g
 
-    def redraw(self):
-        """Instant update (hover, blink, clock): no animation, only changed cells."""
-        if self.trans:
-            return
-        g = self.target()
-        self.write(ansi_diff(self.shown, g))
-        self.shown = g
+    def present(self, frame: Grid, only=None):
+        self.write(ansi_diff(self.shown, frame, only))
+        self.shown = frame
+
+    def set_base(self, new: Grid, animate: bool, speed: float = 1.0):
+        if animate:
+            self.fade_src = self.shown.copy()
+            self.fade = Fade(self.fade_src, new, self.rng, speed)
+            self.fade_t0 = time.time()
+        self.base = new
+        if not animate:
+            self.present(self.compose())
 
     # ── show / hide ───────────────────────────────────────────────────────
-    def show(self, reason: str, text: str | None = None):
+    def show(self, text: str | None = None):
         now = time.time()
         if text:
-            self.say_text = text
-            self.talk_until = now + min(5.0, 1.0 + 0.05 * len(text))
-        self.hide_at = now + (GREET_SECONDS if reason == "login" else IDLE_HIDE)
+            self.say_text, self.say_until = text, now + SAY_SECONDS
+        self.hide_at = now + (SAY_SECONDS if text and not self.visible else IDLE_HIDE)
         if not self.visible:
             self.visible = True
-            self.mouse_mode(True)
+            self.trail.clear()
             self.refresh_async()
-        self.start(self.target())
+        self.set_base(self.home(), animate=True)
 
     def hide(self):
         if not self.visible:
@@ -187,46 +178,49 @@ class Wall:
         self.visible = False
         self.hover = None
         self.say_text = None
-        self.mouse_mode(False)
-        self.start(self.blank, speed=0.6)
+        self.regions = []
+        self.set_base(Grid(self.cols, self.rows), animate=True, speed=0.7)
 
     # ── input ─────────────────────────────────────────────────────────────
+    def drop_dots(self, x: int, y: int):
+        """Leave a few dots where the cursor passed; some drift down like rain."""
+        if (x, y) == self.last_cell:
+            return
+        self.last_cell = (x, y)
+        now = time.time()
+        for _ in range(2):
+            dx, dy = self.rng.randint(-1, 1), self.rng.randint(0, 1)
+            cx, cy = x + dx, y + dy
+            if 0 <= cx < self.cols and 0 <= cy < self.rows:
+                ch = MATRIX[self.rng.randrange(2)] if self.rng.random() < 0.12 else DOTS[self.rng.randrange(3)]
+                self.trail[cy * self.cols + cx] = (ch, now, self.rng.uniform(0.5, 1.1))
+
     def on_mouse(self, b: int, x: int, y: int, press: bool):
         if b & 64:                                   # wheel
             return
-        motion = bool(b & 32)
-        button = b & 3
-        if motion:
+        if b & 32:                                   # motion
             if not self.visible:
+                self.drop_dots(x, y)
                 return
             self.hide_at = max(self.hide_at, time.time() + IDLE_HIDE)
             hit = next((r for r in self.regions if r.hit(x, y)), None)
-            new = hit.index if hit and hit.kind == "project" else None
+            new = hit.index if hit else None
             if new != self.hover:
                 self.hover = new
-                self.redraw()
+                self.set_base(self.home(), animate=False)
             return
-        if not press:
+        if not press or not self.visible:
             return
-        if button == 2:                              # right click: vanish
+        if (b & 3) == 2:                             # right click
             self.hide()
-        elif button == 0:
-            if not self.visible:
-                self.show("click")
-                return
+        elif (b & 3) == 0:
             hit = next((r for r in self.regions if r.hit(x, y)), None)
-            if hit is None:
-                self.hide()
-            elif hit.kind == "project":
-                self.open_project(hit.index)
-            elif hit.kind == "mascot":
-                msgs = self.state.get("messages", [])
-                self.show("say", self.rng.choice(msgs) if msgs else "WOOF.")
+            self.open_project(hit.index) if hit else self.hide()
 
     def on_key(self, ch: str):
-        if ch in "123456" and self.visible:
+        if self.visible and ch in "123456":
             self.open_project(int(ch) - 1)
-        elif ch in ("h", "\x1b"):
+        elif ch == "\x1b":
             self.hide()
 
     def open_project(self, n: int):
@@ -257,8 +251,8 @@ class Wall:
             self.on_mouse(int(m[1]), int(m[2]) - 1, int(m[3]) - 1, m[4] == "M")
             pos = m.end()
         rest = buf[pos:]
-        if "\x1b[" in rest:                          # keep a partial escape for next read
-            cut = rest.index("\x1b[")
+        cut = rest.find("\x1b[")
+        if cut >= 0:                                 # keep a partial escape for the next read
             for ch in rest[:cut]:
                 self.on_key(ch)
             return rest[cut:]
@@ -274,81 +268,65 @@ class Wall:
         if "resize" in self.flags:
             self.flags.discard("resize")
             self.cols, self.rows = self.size()
-            self.blank = Grid(self.cols, self.rows)
-            self.shown = self.blank.copy()
-            self.trans = None
-            self.write("\x1b[48;2;0;0;0m\x1b[2J")
-            if self.visible:
-                self.redraw()
+            self.fade, self.trail = None, {}
+            self.base = self.home() if self.visible else Grid(self.cols, self.rows)
+            self.shown = Grid(self.cols, self.rows)
+            self.write("\x1b[48;2;26;19;13m\x1b[2J")
+            self.present(self.compose())
         if "toggle" in self.flags:
             self.flags.discard("toggle")
-            self.hide() if self.visible else self.show("hotkey")
+            self.hide() if self.visible else self.show()
 
         m = self.mtime(collect.STATE)
         if m != self.state_mtime:
             self.state_mtime = m
             self.state = self.load_state()
-            if self.visible:
-                self.start(self.target())            # only the changed cells re-assemble
+            if self.visible and not self.fade:
+                self.set_base(self.home(), animate=True, speed=0.6)
         m = self.mtime(collect.INBOX)
         if m != self.inbox_mtime:
             self.inbox_mtime = m
             try:
-                self.show("say", json.loads(collect.INBOX.read_text()).get("text"))
+                self.show(json.loads(collect.INBOX.read_text()).get("text"))
             except (OSError, json.JSONDecodeError):
                 pass
 
-        if self.trans:
-            t = now - self.trans_t0
+        if self.fade:
+            t = now - self.fade_t0
             frame = self.shown.copy()
-            self.trans.apply(t, frame, self.trans_src)
-            self.write(ansi_diff(self.shown, frame, only=self.trans.plan.keys()))
-            self.shown = frame
-            if t >= self.trans.end:
-                self.trans = None
+            self.fade.apply(t, frame, self.fade_src)
+            self.present(frame, only=self.fade.plan.keys())
+            if t >= self.fade.end:
+                self.fade = None
             return
 
-        if not self.visible:
-            return
-        if now >= self.hide_at:
-            self.hide()
-            return
-        changed = False
-        if now >= self.next_blink:
-            self.blink_until = now + 0.14
-            self.next_blink = now + self.rng.uniform(3.5, 7.0)
-            changed = True
-        elif self.blink_until and now >= self.blink_until:
-            self.blink_until = 0.0
-            changed = True
-        if now < self.talk_until + 0.2:
-            changed = True
-        minute = time.localtime(now).tm_min
-        if minute != self.minute:
-            self.minute = minute
-            changed = True
-        if changed:
-            self.redraw()
+        if self.trail:
+            dead = [i for i, (_, born, life) in self.trail.items() if now - born >= life]
+            for i in dead:
+                del self.trail[i]
+            self.present(self.compose(), only=set(self.trail) | set(dead))
+
+        if self.visible:
+            if now >= self.hide_at:
+                self.hide()
+                return
+            minute = time.localtime(now).tm_min
+            if minute != self.minute or (self.say_text and now >= self.say_until):
+                self.minute = minute
+                if self.say_text and now >= self.say_until:
+                    self.say_text = None
+                self.set_base(self.home(), animate=False)
 
     def timeout(self) -> float:
-        if self.trans or time.time() < self.talk_until + 0.2:
-            return 1 / FPS
-        if self.visible:
-            return max(0.03, min(1.0, self.next_blink - time.time(), self.blink_until - time.time() if self.blink_until else 1.0))
-        return 1.0
+        return 1 / FPS if (self.fade or self.trail) else 1.0
 
     def run(self, fd: int):
-        self.write("\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1000h\x1b[?1006h\x1b[48;2;0;0;0m\x1b[2J")
+        # any-motion mouse tracking stays on: motion only arrives when the pointer is over the bare desktop
+        self.write("\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1003h\x1b[?1006h\x1b[48;2;26;19;13m\x1b[2J")
         if not collect.STATE.exists():
-            collect.write(collect.collect())
-            self.state = self.load_state()
-            self.state_mtime = self.mtime(collect.STATE)
-        login_at = time.time() + 0.6
+            self.refresh_async()
         pending = ""
         while True:
-            if login_at and time.time() >= login_at:
-                login_at = 0
-                self.show("login")
             r, _, _ = select.select([fd], [], [], self.timeout())
             if r:
                 try:
@@ -387,7 +365,7 @@ def run() -> int:
         log_error()
         raise
     finally:
-        wall.write("\x1b[?1003l\x1b[?1000l\x1b[?1006l\x1b[?7h\x1b[?25h\x1b[0m\x1b[?1049l")
+        wall.write("\x1b[?1003l\x1b[?1006l\x1b[?7h\x1b[?25h\x1b[0m\x1b[?1049l")
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
         try:
             os.unlink(PIDFILE)

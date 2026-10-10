@@ -1,20 +1,18 @@
 # jarvis: the AJSTARS living wallpaper
 
-The desktop is pure black and empty. Summon it and the home screen materializes out of thin air: dots appear, scramble through fragments of your own code, and lock into a greeting, your recent projects and BYTE, a pixel puppy wearing a VitalPaw collar. Click a project to open it. It vanishes the same way.
+At rest the desktop is a plain fresco-umber screen with nothing on it. Move the mouse over the empty desktop and a faint trail of matrix dots follows it and fades. SUPER+H brings up the home screen: a quiet clock, one greeting line and your recent projects as a clickable list. It fades in from dots and leaves the same way.
 
-Everything runs locally: no network, no API keys, and no cost when idle (0 bytes drawn while hidden, about 24 MB of RAM).
+Everything runs locally: no network, no API keys, and nothing drawn while idle (about 22 MB of RAM).
 
 ## Use
 
 | Action | Does |
 |---|---|
-| click the empty desktop / `SUPER+H` | summon |
-| right-click / `SUPER+H` / 45 s idle | vanish |
-| click a project tile (or keys `1`–`6`) | open it on an empty workspace |
-| click BYTE | it says something |
-| `python -m jarvis say "Build done"` | make BYTE say anything, from any script |
-
-At login it greets you for 12 seconds, then fades to black.
+| move the mouse over the desktop | a dot trail follows it and fades |
+| `SUPER+H` | home screen in / out |
+| right-click, click empty space, `Esc`, 30 s idle | home screen leaves |
+| click a project (or `1`–`6`) | open it on an empty workspace |
+| `python -m jarvis say "Build done"` | show a message on the home screen for 8 s |
 
 ## How it works
 
