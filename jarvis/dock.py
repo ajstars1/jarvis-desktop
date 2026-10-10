@@ -584,7 +584,7 @@ class Dock(Gtk.Application):
 
 def main() -> int:
     if LS is None and "--window" not in sys.argv:
-        print("jarvis-dock: gtk4-layer-shell is missing (sudo apt install gir1.2-gtk4layershell-1.0)", file=sys.stderr)
+        print("jarvis-dock: gtk4-layer-shell is missing (sudo apt install libgtk4-layer-shell0 gir1.2-gtk4layershell-1.0)", file=sys.stderr)
         return 1
     return Dock().run([a for a in sys.argv if a != "--window"])
 
