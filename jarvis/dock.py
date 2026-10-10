@@ -54,7 +54,7 @@ MARGIN = 8            # gap between dock and screen edge when shown
 SLIDE_MS = 180
 
 CSS = """
-window.dock-window, window.dock-hotspot { background: transparent; }
+window.dock-window { background: transparent; }
 .dock {
     background: rgba(243, 235, 222, 0.97);
     border: 1px solid #cdb99b;
@@ -185,11 +185,16 @@ class Dock(Gtk.Application):
 
         self.win = Gtk.Window(application=self)
         self.win.add_css_class("dock-window")
-        self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        # full-width transparent strip with the pill centred in it; when hidden, its
+        # bottom 2px stay on screen and catch the mouse anywhere along the edge
+        strip = Gtk.Box(hexpand=True)
+        self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2, halign=Gtk.Align.CENTER, hexpand=True)
         self.box.add_css_class("dock")
-        self.win.set_child(self.box)
+        strip.append(self.box)
+        self.win.set_child(strip)
         motion = Gtk.EventControllerMotion()
-        motion.connect("enter", lambda *_: self.show_dock())
+        motion.connect("enter", lambda *_: self.on_enter())
+        motion.connect("motion", lambda *_: self.on_enter())
         motion.connect("leave", lambda *_: self.schedule_hide())
         self.win.add_controller(motion)
 
@@ -197,25 +202,12 @@ class Dock(Gtk.Application):
             LS.init_for_window(self.win)
             LS.set_namespace(self.win, "jarvis-dock")
             LS.set_layer(self.win, LS.Layer.TOP)
-            LS.set_anchor(self.win, LS.Edge.BOTTOM, True)
-            LS.set_keyboard_mode(self.win, LS.KeyboardMode.ON_DEMAND)
-            self.hotspot = Gtk.Window(application=self)
-            self.hotspot.add_css_class("dock-hotspot")
-            self.hotspot.set_child(Gtk.Box(height_request=2))
-            LS.init_for_window(self.hotspot)
-            LS.set_namespace(self.hotspot, "jarvis-dock-hotspot")
-            LS.set_layer(self.hotspot, LS.Layer.TOP)
             for e in (LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
-                LS.set_anchor(self.hotspot, e, True)
-            LS.set_exclusive_zone(self.hotspot, 0)
-            hm = Gtk.EventControllerMotion()
-            hm.connect("enter", lambda *_: self.show_dock())
-            self.hotspot.add_controller(hm)
+                LS.set_anchor(self.win, e, True)
+            LS.set_keyboard_mode(self.win, LS.KeyboardMode.ON_DEMAND)
         self.populate()
         self.apply_autohide()
         self.win.present()
-        if LS:
-            self.hotspot.present()
         self.refresh_running()
         threading.Thread(target=self.listen, daemon=True).start()
         if self.cfg["autohide"]:
@@ -403,7 +395,26 @@ class Dock(Gtk.Application):
 
     def hidden_margin(self) -> int:
         h = self.win.get_height() or (self.cfg["icon_size"] + 30)
-        return -(h + 4)
+        return -(h - 2)             # leave a 2px edge on screen to catch the mouse
+
+    def pointer_on_dock(self) -> bool:
+        """Hyprland sends 'enter' when the dock appears even if the mouse is far away,
+        so check where the cursor really is."""
+        try:
+            x, y = (int(v) for v in hypr("cursorpos").split(","))
+            mon_h = json.loads(hypr("monitors", "-j") or "[]")[0]["height"]
+        except (ValueError, IndexError, KeyError, json.JSONDecodeError):
+            return True
+        visible_top = mon_h - (self.win.get_height() + self.margin)
+        return y >= visible_top - 1
+
+    def on_enter(self):
+        if not self.cfg["autohide"]:
+            return
+        if self.pointer_on_dock():
+            self.show_dock()
+        else:
+            self.schedule_hide()
 
     def show_dock(self):
         if self.hide_timer:
@@ -419,7 +430,9 @@ class Dock(Gtk.Application):
 
         def go():
             self.hide_timer = 0
-            if not self.popover_open:
+            if self.popover_open or (self.margin >= 0 and self.pointer_on_dock()):
+                self.schedule_hide()        # still in use: check again shortly
+            else:
                 self.slide_to(self.hidden_margin())
             return False
 
