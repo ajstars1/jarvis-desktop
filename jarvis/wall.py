@@ -221,8 +221,6 @@ class Wall:
         cmds = p.get("open") or ["kitty --directory {path}"]
         in_hypr = bool(os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"))
         try:
-            if in_hypr:
-                subprocess.run(["hyprctl", "dispatch", "workspace", "emptym"], capture_output=True, timeout=3)
             for c in cmds:
                 c = c.format(path=shlex.quote(p["path"]))
                 if in_hypr:
