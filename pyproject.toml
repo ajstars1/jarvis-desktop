@@ -1,0 +1,13 @@
+[project]
+name = "jarvis"
+version = "0.1.0"
+description = "AJSTARS living wallpaper: a code-drawn, clickable home screen with a pixel mascot"
+requires-python = ">=3.12"
+dependencies = [
+    "pillow>=12.3.0",
+]
+
+[project.optional-dependencies]
+voice = [
+    "piper-tts>=1.8.0",
+]
