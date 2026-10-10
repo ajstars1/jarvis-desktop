@@ -37,7 +37,8 @@ except (ValueError, ImportError):
 try:
     gi.require_version("Gtk4LayerShell", "1.0")
     from gi.repository import Gtk4LayerShell as LS  # noqa: E402
-except (ValueError, ImportError):
+    LS.get_major_version()          # the typelib can exist without the library behind it
+except (ValueError, ImportError, GLib.Error):
     LS = None
 
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "jarvis" / "dock.json"
