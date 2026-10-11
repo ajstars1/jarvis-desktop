@@ -125,11 +125,21 @@ def focus_window(c: dict):
 
 # ── apps ─────────────────────────────────────────────────────────────────
 class Apps:
-    """Maps Hyprland window classes to installed .desktop apps."""
+    """Maps Hyprland window classes to installed .desktop apps. Re-reads the app
+    list when apps are installed or removed, so new apps show up right away."""
 
     def __init__(self):
-        self.all = [a for a in Gio.AppInfo.get_all() if isinstance(a, DesktopAppInfo)]
+        self.all = []
         self.cache: dict = {}
+        self.loaded_at = 0.0
+        self.reload()
+        self.monitor = Gio.AppInfoMonitor.get()
+        self.monitor.connect("changed", lambda *_: self.reload())
+
+    def reload(self):
+        self.all = [a for a in Gio.AppInfo.get_all() if isinstance(a, DesktopAppInfo)]
+        self.cache.clear()
+        self.loaded_at = GLib.get_monotonic_time() / 1e6
 
     def get(self, app_id: str):
         try:
@@ -137,19 +147,25 @@ class Apps:
         except TypeError:
             return None
 
-    def for_class(self, cls: str):
-        if cls in self.cache:
-            return self.cache[cls]
+    def match(self, cls: str):
         c = cls.lower()
-        found = None
         for a in self.all:
             wm = (a.get_startup_wm_class() or "").lower()
             aid = a.get_id().lower().removesuffix(".desktop")
             exe = os.path.basename(a.get_executable() or "").lower()
             if c in (wm, aid, exe) or aid.endswith("." + c) or aid.split("_")[0] == c:
-                found = a
-                break
-        self.cache[cls] = found
+                return a
+        return None
+
+    def for_class(self, cls: str):
+        if cls in self.cache:
+            return self.cache[cls]
+        found = self.match(cls)
+        if found is None and GLib.get_monotonic_time() / 1e6 - self.loaded_at > 5:
+            self.reload()                      # maybe it was installed after the dock started
+            found = self.match(cls)
+        if found is not None:
+            self.cache[cls] = found
         return found
 
 
@@ -240,6 +256,12 @@ class Dock(Gtk.Application):
             img = Gtk.Image.new_from_icon_name("view-app-grid-symbolic")
             img.add_css_class("apps-icon")
             name = "Apps"
+        elif app_id.startswith("class:"):
+            cls = app_id[6:]
+            theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+            icon = next((n for n in (cls, cls.lower(), cls.split(".")[-1].lower()) if theme.has_icon(n)), "application-x-executable")
+            img = Gtk.Image.new_from_icon_name(icon)
+            name = cls.split(".")[-1].replace("-", " ").title()
         else:
             app = self.apps.get(app_id)
             if app is None:
@@ -276,9 +298,8 @@ class Dock(Gtk.Application):
             if c["class"] in ("jarvis-wall",):
                 continue
             app = self.apps.for_class(c["class"])
-            key = app.get_id() if app else None
-            if key:
-                running.setdefault(key, []).append(c)
+            key = app.get_id() if app else "class:" + c["class"]   # no .desktop file: still show it
+            running.setdefault(key, []).append(c)
         changed_set = set(running) != set(self.running)
         self.running = running
         if changed_set and self.cfg["show_unpinned"]:
@@ -340,7 +361,13 @@ class Dock(Gtk.Application):
             b.connect("clicked", lambda *_: (pop.popdown(), fn()))
             col.append(b)
 
-        name = "Apps" if app_id == LAUNCHPAD else (self.apps.get(app_id).get_display_name() if self.apps.get(app_id) else app_id)
+        launchable = app_id != LAUNCHPAD and not app_id.startswith("class:")
+        if app_id == LAUNCHPAD:
+            name = "Apps"
+        elif launchable and self.apps.get(app_id):
+            name = self.apps.get(app_id).get_display_name()
+        else:
+            name = app_id.removeprefix("class:")
         title = Gtk.Label(label=name, xalign=0)
         title.add_css_class("title")
         col.append(title)
@@ -351,11 +378,11 @@ class Dock(Gtk.Application):
             item(t + mark, lambda w=w: focus_window(w))
         if wins:
             col.append(Gtk.Separator())
-        if app_id != LAUNCHPAD:
+        if launchable:
             item("New Window", lambda: self.launch(app_id))
         if wins:
             item("Maximize", lambda: (focus_window(wins[0]), hypr("dispatch", "fullscreen", "1")))
-        if app_id != LAUNCHPAD:
+        if launchable:
             if pinned:
                 item("Remove from Dock", lambda: self.set_pinned(app_id, False))
             else:
