@@ -13,6 +13,9 @@ import re
 import select
 import shlex
 import signal
+import socket
+import struct
+import fcntl
 import subprocess
 import sys
 import termios
@@ -88,6 +91,7 @@ class Wall:
         self.minute = -1
         self.collecting = False
         self.last_cell = (-1, -1)
+        self.last_click = None
         self.next_refresh = 0.0
 
     # ── plumbing ──────────────────────────────────────────────────────────
@@ -207,6 +211,33 @@ class Wall:
             hit = next((r for r in self.regions if r.hit(x, y)), None)
             if hit:
                 self.open_project(hit.index)
+                return
+            now = time.time()
+            last = self.last_click
+            if last and now - last[0] < 0.45 and abs(x - last[1]) <= 2 and abs(y - last[2]) <= 1:
+                self.last_click = None           # double-click on empty wallpaper: open the prompt here
+                cw, ch = self.cell_px()
+                self.tell_dock(f"prompt {x * cw} {y * ch}")
+            else:
+                self.last_click = (now, x, y)
+                self.tell_dock("prompt-close")   # a single click elsewhere closes an open prompt
+
+    def cell_px(self) -> tuple[int, int]:
+        """Pixel size of one character cell, from the terminal (falls back to 7x14)."""
+        try:
+            rows, cols, xp, yp = struct.unpack("HHHH", fcntl.ioctl(sys.stdin.fileno(), termios.TIOCGWINSZ, b"\0" * 8))
+            if xp and yp and cols and rows:
+                return xp // cols, yp // rows
+        except OSError:
+            pass
+        return 7, 14
+
+    def tell_dock(self, msg: str):
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
+                s.sendto(msg.encode(), os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jarvis-dock.sock"))
+        except OSError:
+            pass
 
     def on_key(self, ch: str):
         if self.visible and ch in "123456":

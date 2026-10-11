@@ -23,6 +23,8 @@ from pathlib import Path
 
 import gi
 
+import assistant  # the wallpaper assistant's brain (same folder)
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
@@ -55,6 +57,14 @@ SLIDE_MS = 180
 
 CSS = """
 window.dock-window, window.snap-preview-window { background: transparent; }
+window.prompt-window { background: transparent; }
+.prompt { background: rgba(236, 226, 208, 0.97); border-radius: 10px; padding: 8px 12px; }
+.prompt-chevron { color: #a7783f; font-family: "DepartureMono Nerd Font"; font-size: 11px; }
+entry.prompt-entry { background: transparent; border: none; box-shadow: none; outline: none; padding: 0; min-height: 0;
+    color: #3d2c1f; caret-color: #a7783f; font-family: "DepartureMono Nerd Font"; font-size: 11px; }
+entry.prompt-entry > text > placeholder { color: #b5a185; }
+.prompt-reply { color: #6b5540; font-family: "DepartureMono Nerd Font"; font-size: 11px; }
+.prompt-reply.thinking { color: #a7783f; }
 .snap-preview {
     background: rgba(167, 120, 63, 0.16);
     border: 2px solid rgba(167, 120, 63, 0.75);
@@ -233,6 +243,7 @@ class Dock(Gtk.Application):
         self.apply_autohide()
         self.win.present()
         self.make_preview()
+        self.make_prompt()
         self.refresh_running()
         threading.Thread(target=self.listen, daemon=True).start()
         if self.cfg["autohide"]:
@@ -271,6 +282,17 @@ class Dock(Gtk.Application):
             GLib.idle_add(self.on_preview, msg)
 
     def on_preview(self, msg):
+        if msg and msg[0] == "prompt" and len(msg) == 3:
+            self.open_prompt(int(msg[1]), int(msg[2]))
+            return False
+        if msg and msg[0] == "prompt-close":
+            self.close_prompt()
+            return False
+        if msg and msg[0] == "prompt-ask":          # for testing: submit text as if typed
+            self.open_prompt(400, 300)
+            self.prompt_entry.set_text(" ".join(msg[1:]))
+            self.on_prompt_submit(self.prompt_entry)
+            return False
         inset = 6
         if len(msg) == 5 and msg[0] == "show":
             x, y, w, h = (int(v) for v in msg[1:])
@@ -289,6 +311,181 @@ class Dock(Gtk.Application):
         else:
             self.preview.set_visible(False)
         return False
+
+    # ── wallpaper prompt: double-click the wallpaper, type, Enter ──────────
+    def make_prompt(self):
+        self.prompt = None
+        if not LS:
+            return
+        w = Gtk.Window(application=self)
+        w.add_css_class("prompt-window")
+        w.set_resizable(False)
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        col.add_css_class("prompt")
+        row = Gtk.Box(spacing=8)
+        chevron = Gtk.Label(label="›")
+        chevron.add_css_class("prompt-chevron")
+        self.prompt_entry = Gtk.Entry(has_frame=False, hexpand=True, width_chars=46,
+                                      placeholder_text="ask, or tell me to open something")
+        self.prompt_entry.add_css_class("prompt-entry")
+        self.prompt_entry.connect("activate", self.on_prompt_submit)
+        row.append(chevron)
+        row.append(self.prompt_entry)
+        self.prompt_reply = Gtk.Label(xalign=0, wrap=True, max_width_chars=58, visible=False)
+        self.prompt_reply.add_css_class("prompt-reply")
+        col.append(row)
+        col.append(self.prompt_reply)
+        w.set_child(col)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.on_prompt_key)
+        w.add_controller(keys)
+        click = Gtk.GestureClick()
+        click.connect("pressed", lambda *_: self.reask() if self.prompt_done else None)
+        w.add_controller(click)
+        LS.init_for_window(w)
+        LS.set_namespace(w, "jarvis-prompt")
+        LS.set_layer(w, LS.Layer.TOP)
+        LS.set_anchor(w, LS.Edge.TOP, True)
+        LS.set_anchor(w, LS.Edge.LEFT, True)
+        LS.set_exclusive_zone(w, -1)
+        LS.set_keyboard_mode(w, LS.KeyboardMode.NONE)
+        self.prompt = w
+        self.prompt_timer = 0
+        self.prompt_anim = 0
+        self.prompt_done = False
+        self.prompt_history: list[str] = []
+        self.history_at = 0
+
+    def open_prompt(self, x: int, y: int):
+        if not self.prompt:
+            return
+        geo = Gdk.Display.get_default().get_monitors().get_item(0).get_geometry()
+        x = max(8, min(x - 16, geo.width - 480))
+        y = max(30, min(y - 10, geo.height - 190))
+        LS.set_margin(self.prompt, LS.Edge.LEFT, x)
+        LS.set_margin(self.prompt, LS.Edge.TOP, y)
+        self.reask()
+
+    def reask(self):
+        """Ready for a (new) question: empty line, keyboard held while typing."""
+        self.stop_anim()
+        self.prompt_done = False
+        self.prompt_entry.set_editable(True)
+        self.prompt_entry.set_text("")
+        self.prompt_reply.set_visible(False)
+        self.history_at = len(self.prompt_history)
+        LS.set_keyboard_mode(self.prompt, LS.KeyboardMode.EXCLUSIVE)
+        self.prompt.set_visible(True)
+        self.prompt.present()
+        self.prompt_entry.grab_focus()
+        self.arm_prompt_close(60)
+
+    def close_prompt(self):
+        if not self.prompt:
+            return
+        self.stop_anim()
+        if self.prompt_timer:
+            GLib.source_remove(self.prompt_timer)
+            self.prompt_timer = 0
+        LS.set_keyboard_mode(self.prompt, LS.KeyboardMode.NONE)
+        self.prompt.set_visible(False)
+
+    def arm_prompt_close(self, seconds: int):
+        if self.prompt_timer:
+            GLib.source_remove(self.prompt_timer)
+
+        def done():
+            self.prompt_timer = 0
+            self.close_prompt()
+            return False
+
+        self.prompt_timer = GLib.timeout_add_seconds(seconds, done)
+
+    def on_prompt_key(self, _ctrl, keyval, _code, _state):
+        name = Gdk.keyval_name(keyval)
+        if name == "Escape":
+            self.close_prompt()
+            return True
+        if name in ("Up", "Down") and self.prompt_history and not self.prompt_done:
+            self.history_at = max(0, min(len(self.prompt_history), self.history_at + (-1 if name == "Up" else 1)))
+            text = self.prompt_history[self.history_at] if self.history_at < len(self.prompt_history) else ""
+            self.prompt_entry.set_text(text)
+            self.prompt_entry.set_position(-1)
+            return True
+        return False
+
+    def on_prompt_submit(self, entry):
+        text = entry.get_text().strip()
+        if not text:
+            self.close_prompt()
+            return
+        self.prompt_history.append(text)
+        self.prompt_done = True
+        entry.set_editable(False)
+        LS.set_keyboard_mode(self.prompt, LS.KeyboardMode.NONE)   # hand the keyboard straight back
+        local = assistant.handle(text)
+        if local:
+            self.show_reply(local["reply"])
+            assistant.run_action(local["action"], self.launch_app_id)
+            self.arm_prompt_close(6 if local["action"] else 20)
+            return
+        self.show_thinking()
+
+        def work():
+            r = assistant.ask(text)
+            GLib.idle_add(self.got_answer, r)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def got_answer(self, r):
+        self.show_reply(r["reply"])
+        assistant.run_action(r["action"], self.launch_app_id)
+        self.arm_prompt_close(40)
+        return False
+
+    def stop_anim(self):
+        if self.prompt_anim:
+            GLib.source_remove(self.prompt_anim)
+            self.prompt_anim = 0
+        self.prompt_reply.remove_css_class("thinking")
+
+    def show_thinking(self):
+        self.stop_anim()
+        self.prompt_reply.add_css_class("thinking")
+        self.prompt_reply.set_visible(True)
+        step = [0]
+
+        def tick():
+            step[0] = (step[0] + 1) % 4
+            self.prompt_reply.set_text(" ".join("·" * max(1, step[0])))
+            return True
+
+        tick()
+        self.prompt_anim = GLib.timeout_add(280, tick)
+
+    def show_reply(self, text: str):
+        """Types the answer out, a few characters at a time."""
+        self.stop_anim()
+        self.prompt_reply.set_visible(True)
+        shown = [0]
+
+        def tick():
+            shown[0] = min(len(text), shown[0] + 3)
+            self.prompt_reply.set_text(text[:shown[0]])
+            if shown[0] >= len(text):
+                self.prompt_anim = 0
+                return False
+            return True
+
+        self.prompt_reply.set_text("")
+        self.prompt_anim = GLib.timeout_add(14, tick)
+
+    def launch_app_id(self, app_id: str) -> bool:
+        app = self.apps.get(app_id)
+        if not app:
+            return False
+        app.launch([], Gdk.Display.get_default().get_app_launch_context())
+        return True
 
     # items
     def populate(self):

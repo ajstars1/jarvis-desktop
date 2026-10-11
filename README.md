@@ -14,6 +14,20 @@ Everything runs locally: no network, no API keys, and nothing drawn while idle (
 | click a project (or `1`–`6`) | open it on an empty workspace |
 | `python -m jarvis say "Build done"` | show a message on the home screen for 8 s |
 
+## Wallpaper assistant
+
+**Double-click anywhere on the empty wallpaper**, type, and press Enter. Esc while typing, or a click elsewhere on the wallpaper, closes it. Click the answer to ask again.
+
+- **Done locally, instantly, free:**
+  - open apps, sites, folders and projects: "open blender", "open youtube", "open downloads", "open vitalpaw"
+  - search: "play lofi on youtube", "search best laptops"
+  - system info: "how much ram", "what time is it", "cpu temp", "ip"
+  - "lock", "screenshot", "volume up"
+  - how-to questions about this desktop: "how do I snap windows?"
+- **Anything else** goes to Claude (Haiku, through the Claude Code login) and comes back as a couple of sentences. Claude can only ask for the same safe actions (open a URL, open an app, search); it never runs commands. It uses `--tools ""`, no MCP servers and no saved session.
+
+The brain is `jarvis/assistant.py`. The prompt is drawn by the dock (`jarvis/dock.py`), and the wallpaper detects the double-click. Try the brain from a terminal: `.venv/bin/python -m jarvis ask "open youtube"` (add `--do` to really do it).
+
 ## How it works
 
 - `jarvis/collect.py` writes `~/.cache/jarvis/state.json`. It ranks projects by your Claude Code sessions, commits *you* authored, and uncommitted edits, and adds RAM, disk and temperature. It rewrites the file only when something changed.

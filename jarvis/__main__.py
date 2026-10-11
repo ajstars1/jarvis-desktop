@@ -4,6 +4,7 @@
   python -m jarvis wall             run the live wallpaper (inside kitty's panel)
   python -m jarvis say "text"       make the mascot say something
   python -m jarvis preview out.png  render one frame to a PNG
+  python -m jarvis ask "open youtube" [--do]   what the wallpaper assistant would do
 """
 import json
 import sys
@@ -30,6 +31,21 @@ def main(argv: list[str]) -> int:
         grid, _ = build(state, 195, 54, hover=0)
         to_png(grid, out, font_path())
         print(f"wrote {out}")
+        return 0
+    if cmd == "ask":
+        from . import assistant
+
+        do = "--do" in argv
+        text = " ".join(a for a in argv[1:] if a != "--do")
+        r = assistant.handle(text)
+        if r is None:
+            print("(asking Claude)")
+            r = assistant.ask(text)
+        print(r["reply"])
+        if r["action"]:
+            print("action:", r["action"])
+            if do:
+                assistant.run_action(r["action"])
         return 0
     if cmd == "dump":
         print(json.dumps(collect.collect(), indent=1))
