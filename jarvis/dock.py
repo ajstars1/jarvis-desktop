@@ -54,7 +54,12 @@ MARGIN = 8            # gap between dock and screen edge when shown
 SLIDE_MS = 180
 
 CSS = """
-window.dock-window { background: transparent; }
+window.dock-window, window.snap-preview-window { background: transparent; }
+.snap-preview {
+    background: rgba(167, 120, 63, 0.16);
+    border: 2px solid rgba(167, 120, 63, 0.75);
+    border-radius: 14px;
+}
 .dock {
     background: rgba(243, 235, 222, 0.97);
     border: 1px solid #cdb99b;
@@ -225,10 +230,63 @@ class Dock(Gtk.Application):
         self.populate()
         self.apply_autohide()
         self.win.present()
+        self.make_preview()
         self.refresh_running()
         threading.Thread(target=self.listen, daemon=True).start()
         if self.cfg["autohide"]:
             self.schedule_hide(1500)
+
+    # snap preview: an outline showing where a dragged window will land (driven by snap.py)
+    def make_preview(self):
+        if not LS:
+            return
+        w = Gtk.Window(application=self)
+        w.add_css_class("snap-preview-window")
+        w.set_resizable(False)
+        self.preview_box = Gtk.Box()
+        self.preview_box.add_css_class("snap-preview")
+        w.set_child(self.preview_box)
+        LS.init_for_window(w)
+        LS.set_namespace(w, "jarvis-snap-preview")
+        LS.set_layer(w, LS.Layer.OVERLAY)
+        LS.set_anchor(w, LS.Edge.TOP, True)
+        LS.set_anchor(w, LS.Edge.LEFT, True)
+        LS.set_exclusive_zone(w, -1)
+        LS.set_keyboard_mode(w, LS.KeyboardMode.NONE)
+        self.preview = w
+        threading.Thread(target=self.preview_server, daemon=True).start()
+
+    def preview_server(self):
+        path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jarvis-dock.sock")
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        s.bind(path)
+        while True:
+            msg = s.recv(256).decode(errors="ignore").split()
+            GLib.idle_add(self.on_preview, msg)
+
+    def on_preview(self, msg):
+        inset = 6
+        if len(msg) == 5 and msg[0] == "show":
+            x, y, w, h = (int(v) for v in msg[1:])
+            LS.set_margin(self.preview, LS.Edge.LEFT, x + inset)
+            LS.set_margin(self.preview, LS.Edge.TOP, y + inset)
+            self.preview_box.set_size_request(max(1, w - 2 * inset), max(1, h - 2 * inset))
+            self.preview.set_visible(True)
+            surf = self.preview.get_surface()
+            if surf is not None and not getattr(self, "preview_passthrough", False):
+                try:
+                    import cairo
+                    surf.set_input_region(cairo.Region())   # never catches the mouse
+                    self.preview_passthrough = True
+                except (ImportError, TypeError):
+                    pass
+        else:
+            self.preview.set_visible(False)
+        return False
 
     # items
     def populate(self):
