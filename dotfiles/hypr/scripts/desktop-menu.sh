@@ -12,7 +12,7 @@ case "$choice" in
     Browser)    xdg-open https:// >/dev/null 2>&1 || google-chrome ;;
     "Tile windows (full view)") ~/.config/hypr/scripts/arrange.sh tile ;;
     "Float windows") ~/.config/hypr/scripts/arrange.sh float ;;
-    "Dock settings") "$REPO/bin/jarvis-dock" --settings ;;
+    "Dock settings") "$REPO/bin/sotto-dock" --settings ;;
     Screenshot) ~/.config/hypr/scripts/screenshot.sh region ;;
     Lock)       loginctl lock-session ;;
     "Log out")  hyprctl dispatch exit ;;

@@ -1,7 +1,7 @@
 [project]
-name = "jarvis"
+name = "sotto"
 version = "0.1.0"
-description = "AJSTARS living wallpaper: a code-drawn, clickable home screen with a pixel mascot"
+description = "A wallpaper that speaks softly: a living, data-driven Hyprland wallpaper you can talk to"
 requires-python = ">=3.12"
 dependencies = [
     "pillow>=12.3.0",

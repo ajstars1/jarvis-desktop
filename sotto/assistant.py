@@ -9,7 +9,7 @@ couple of sentences. Claude can only ask for the same safe actions; it never
 runs commands.
 
 Pure standard library, so it works from the dock (system python + GTK) and
-from `python -m jarvis ask "..."` alike.
+from `python -m sotto ask "..."` alike.
 """
 import configparser
 import json
@@ -22,8 +22,8 @@ import urllib.parse
 from pathlib import Path
 
 HOME = Path.home()
-STATE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "jarvis" / "state.json"
-WORKDIR = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "jarvis" / "assistant"
+STATE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "sotto" / "state.json"
+WORKDIR = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "sotto" / "assistant"
 APP_DIRS = [
     HOME / ".local/share/applications",
     HOME / ".local/share/flatpak/exports/share/applications",

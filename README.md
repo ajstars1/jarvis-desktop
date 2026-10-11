@@ -1,4 +1,4 @@
-# jarvis-desktop
+# sotto
 
 **A wallpaper that's alive.** It knows what you're working on, it redraws itself from a JSON file, scripts can talk to it, and you can double-click it to ask anything.
 
@@ -16,11 +16,11 @@ It isn't an image or a video. It's **a small program drawing on the desktop itse
   - uncommitted edits
 
   Each row shows its branch, uncommitted changes and when you last touched it. **Click a project to open it.**
-- **It's data-driven.** Everything comes from `~/.cache/jarvis/state.json`. A collector refreshes it every few minutes, and anything else can write it too. When the file changes, **only the changed cells re-assemble**: they flicker as dots, then settle into the new text. In the GIF, a new project slides into the list that way.
+- **It's data-driven.** Everything comes from `~/.cache/sotto/state.json`. A collector refreshes it every few minutes, and anything else can write it too. When the file changes, **only the changed cells re-assemble**: they flicker as dots, then settle into the new text. In the GIF, a new project slides into the list that way.
 - **Scripts can talk to it.**
 
   ```sh
-  make && python -m jarvis say "build finished · 42 tests passed"
+  make && python -m sotto say "build finished · 42 tests passed"
   ```
 
   The message takes the greeting's place for a few seconds. It's useful for long builds, test runs, deploys and reminders.
@@ -52,7 +52,7 @@ It behaves like a popup:
 - Esc, a click anywhere else, or switching windows closes it.
 - After Enter it gives the keyboard straight back. Click the answer to ask something new.
 
-Try the brain from a terminal: `python -m jarvis ask "open youtube"` (add `--do` to actually do it). New commands are a pattern and an action in [`jarvis/assistant.py`](jarvis/assistant.py).
+Try the brain from a terminal: `python -m sotto ask "open youtube"` (add `--do` to actually do it). New commands are a pattern and an action in [`sotto/assistant.py`](sotto/assistant.py).
 
 ## The rest of the desktop
 
@@ -75,19 +75,19 @@ Try the brain from a terminal: `python -m jarvis ask "open youtube"` (add `--do`
 Tested on Ubuntu 26.04 with Hyprland 0.53, on one 1366×768 screen and a 2016 Intel desktop with 8 GB of RAM.
 
 ```sh
-git clone https://github.com/ajstars1/jarvis-desktop ~/Developer/jarvis-desktop
-cd ~/Developer/jarvis-desktop
+git clone https://github.com/ajstars1/sotto ~/Developer/sotto
+cd ~/Developer/sotto
 sudo apt install $(cat dotfiles/packages.txt)
 uv sync --managed-python --python 3.12          # the wallpaper's Python env; immune to OS Python upgrades
 ./dotfiles/install.sh                           # links configs into ~/.config, backing up what it replaces
 ```
 
-Set `$jarvis` near the top of `dotfiles/hypr/hyprland.conf` to where you cloned the repo. Then log out, pick **Hyprland** on the login screen, and log in. For AI answers, install and log in to [Claude Code](https://claude.com/claude-code).
+Set `$sotto` near the top of `dotfiles/hypr/hyprland.conf` to where you cloned the repo. Then log out, pick **Hyprland** on the login screen, and log in. For AI answers, install and log in to [Claude Code](https://claude.com/claude-code).
 
 ## Configuration
 
 ```toml
-# ~/.config/jarvis/config.toml
+# ~/.config/sotto/config.toml
 name = "Sam"                          # the greeting
 hide = ["~/Developer/some-fork"]      # projects to leave off the wallpaper
 
@@ -97,7 +97,7 @@ label = "MY-APP"
 open = ["kitty --directory {path}", "kitty --directory {path} -e npm run dev"]
 ```
 
-- **The dock:** Dock Settings (right-click any dock icon), saved to `~/.config/jarvis/dock.json`.
+- **The dock:** Dock Settings (right-click any dock icon), saved to `~/.config/sotto/dock.json`.
 - **Palette, keybinds, title bars, bar, launcher, notifications, lock screen:** `dotfiles/`.
 - **Shortcuts:** `Super+F1` lists every one.
 
@@ -105,13 +105,13 @@ open = ["kitty --directory {path}", "kitty --directory {path} -e npm run dev"]
 
 | Part | What it does |
 |---|---|
-| [`jarvis/collect.py`](jarvis/collect.py) | builds `state.json`: projects (Claude sessions, your commits, uncommitted edits) and system info. It rewrites the file only when something changed. |
-| [`jarvis/wall.py`](jarvis/wall.py) | the wallpaper: watches `state.json` and the `say` inbox, re-assembles only changed cells, dot trail, clicks, and the double-click that opens the prompt |
-| [`jarvis/assistant.py`](jarvis/assistant.py) | the prompt's brain: local intents first, Claude only for real questions, a whitelist of safe actions |
-| [`jarvis/dock.py`](jarvis/dock.py) | GTK4 + gtk4-layer-shell: the dock, the wallpaper prompt, and the snap preview outline |
+| [`sotto/collect.py`](sotto/collect.py) | builds `state.json`: projects (Claude sessions, your commits, uncommitted edits) and system info. It rewrites the file only when something changed. |
+| [`sotto/wall.py`](sotto/wall.py) | the wallpaper: watches `state.json` and the `say` inbox, re-assembles only changed cells, dot trail, clicks, and the double-click that opens the prompt |
+| [`sotto/assistant.py`](sotto/assistant.py) | the prompt's brain: local intents first, Claude only for real questions, a whitelist of safe actions |
+| [`sotto/dock.py`](sotto/dock.py) | GTK4 + gtk4-layer-shell: the dock, the wallpaper prompt, and the snap preview outline |
 | [`dotfiles/hypr/scripts/`](dotfiles/hypr/scripts/) | the desktop behaviour Hyprland doesn't have: snapping (`snap.py` notices a drag by a window moving exactly with the cursor), minimize, maximize, show desktop, top-bar clicks |
 
-`demo/state.json` is the sample data used in the GIFs. Run the wallpaper with `JARVIS_DEMO=1 JARVIS_STATE=demo/state.json` to show it. To render a frame without a screen: `python -m jarvis preview out.png`.
+`demo/state.json` is the sample data used in the GIFs. Run the wallpaper with `SOTTO_DEMO=1 SOTTO_STATE=demo/state.json` to show it. To render a frame without a screen: `python -m sotto preview out.png`.
 
 ## Known limits
 

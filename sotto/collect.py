@@ -19,10 +19,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 HOME = Path.home()
-CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "jarvis"
-STATE = Path(os.environ["JARVIS_STATE"]) if os.environ.get("JARVIS_STATE") else CACHE / "state.json"
+CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "sotto"
+STATE = Path(os.environ["SOTTO_STATE"]) if os.environ.get("SOTTO_STATE") else CACHE / "state.json"
 INBOX = CACHE / "say.json"
-CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "jarvis" / "config.toml"
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "sotto" / "config.toml"
 CLAUDE_PROJECTS = HOME / ".claude" / "projects"
 SCAN_ROOTS = [HOME / "Developer"]
 MAX_PROJECTS = 6
@@ -282,7 +282,7 @@ def collect():
     cfg = config()
     now = int(time.time())
     hour = time.localtime(now).tm_hour
-    name = str(cfg.get("name") or os.environ.get("JARVIS_NAME") or getpass.getuser()).upper()
+    name = str(cfg.get("name") or os.environ.get("SOTTO_NAME") or getpass.getuser()).upper()
     hidden = {Path(os.path.expanduser(h)).resolve() for h in cfg.get("hide", [])}
     pins = {Path(os.path.expanduser(p["path"])).resolve(): p for p in cfg.get("pin", [])}
 
@@ -378,7 +378,7 @@ def write(state: dict) -> bool:
 
 
 def say(text: str, mood: str | None = None):
-    """Let anything make the mascot talk: `python -m jarvis say "Build finished"`."""
+    """Let anything make the mascot talk: `python -m sotto say "Build finished"`."""
     CACHE.mkdir(parents=True, exist_ok=True)
     tmp = INBOX.with_suffix(".tmp")
     tmp.write_text(json.dumps({"text": text, "mood": mood, "at": time.time()}))

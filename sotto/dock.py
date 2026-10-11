@@ -10,8 +10,8 @@
   Quit, Dock Settings…
 - Dock Settings: pick, order and remove apps, icon size, auto-hide
 
-Settings live in ~/.config/jarvis/dock.json. Runs with the system python3
-(python3-gi); bin/jarvis-dock preloads libgtk4-layer-shell as GTK requires.
+Settings live in ~/.config/sotto/dock.json. Runs with the system python3
+(python3-gi); bin/sotto-dock preloads libgtk4-layer-shell as GTK requires.
 """
 import json
 import os
@@ -49,7 +49,7 @@ try:
 except (ValueError, ImportError, GLib.Error):
     LS = None
 
-CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "jarvis" / "dock.json"
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "sotto" / "dock.json"
 LAUNCHPAD = "launchpad"
 DEFAULTS = {
     "pinned": [LAUNCHPAD, "org.gnome.Nautilus.desktop", "google-chrome.desktop", "kitty.desktop",
@@ -193,7 +193,7 @@ class Apps:
 # ── dock ─────────────────────────────────────────────────────────────────
 class Dock(Gtk.Application):
     def __init__(self):
-        super().__init__(application_id="dev.ajstars.dock", flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        super().__init__(application_id="dev.ajstars.sotto", flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
         self.cfg = load_config()
         self.apps = Apps()
         self.win = None
@@ -238,7 +238,7 @@ class Dock(Gtk.Application):
 
         if LS:
             LS.init_for_window(self.win)
-            LS.set_namespace(self.win, "jarvis-dock")
+            LS.set_namespace(self.win, "sotto-dock")
             LS.set_layer(self.win, LS.Layer.TOP)
             for e in (LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
                 LS.set_anchor(self.win, e, True)
@@ -266,7 +266,7 @@ class Dock(Gtk.Application):
         self.preview_box.add_css_class("snap-preview")
         w.set_child(self.preview_box)
         LS.init_for_window(w)
-        LS.set_namespace(w, "jarvis-snap-preview")
+        LS.set_namespace(w, "sotto-snap-preview")
         LS.set_layer(w, LS.Layer.OVERLAY)
         LS.set_anchor(w, LS.Edge.TOP, True)
         LS.set_anchor(w, LS.Edge.LEFT, True)
@@ -276,7 +276,7 @@ class Dock(Gtk.Application):
         threading.Thread(target=self.preview_server, daemon=True).start()
 
     def preview_server(self):
-        path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jarvis-dock.sock")
+        path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "sotto.sock")
         try:
             os.unlink(path)
         except OSError:
@@ -369,7 +369,7 @@ class Dock(Gtk.Application):
         click.connect("pressed", self.on_prompt_click)
         w.add_controller(click)
         LS.init_for_window(w)
-        LS.set_namespace(w, "jarvis-prompt")
+        LS.set_namespace(w, "sotto-prompt")
         LS.set_layer(w, LS.Layer.TOP)
         for e in (LS.Edge.TOP, LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
             LS.set_anchor(w, e, True)
@@ -619,7 +619,7 @@ class Dock(Gtk.Application):
         self.refresh_pending = False
         running: dict[str, list[dict]] = {}
         for c in clients():
-            if c["class"] in ("jarvis-wall",):
+            if c["class"] in ("sotto-wall",):
                 continue
             app = self.apps.for_class(c["class"])
             key = app.get_id() if app else "class:" + c["class"]   # no .desktop file: still show it
@@ -952,7 +952,7 @@ class Dock(Gtk.Application):
 
 def main() -> int:
     if LS is None and "--window" not in sys.argv:
-        print("jarvis-dock: gtk4-layer-shell is missing (sudo apt install libgtk4-layer-shell0 gir1.2-gtk4layershell-1.0)", file=sys.stderr)
+        print("sotto-dock: gtk4-layer-shell is missing (sudo apt install libgtk4-layer-shell0 gir1.2-gtk4layershell-1.0)", file=sys.stderr)
         return 1
     return Dock().run([a for a in sys.argv if a != "--window"])
 

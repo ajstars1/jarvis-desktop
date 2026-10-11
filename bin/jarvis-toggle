@@ -1,3 +1,0 @@
-#!/bin/sh
-# SUPER+H: summon or vanish the living wallpaper.
-kill -USR1 "$(cat "${XDG_RUNTIME_DIR:-/tmp}/jarvis-wall.pid")" 2>/dev/null

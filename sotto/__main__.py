@@ -1,10 +1,10 @@
-"""jarvis: the AJSTARS living wallpaper.
+"""sotto: the AJSTARS living wallpaper.
 
-  python -m jarvis collect          refresh state.json (only rewrites on change)
-  python -m jarvis wall             run the live wallpaper (inside kitty's panel)
-  python -m jarvis say "text"       make the mascot say something
-  python -m jarvis preview out.png  render one frame to a PNG
-  python -m jarvis ask "open youtube" [--do]   what the wallpaper assistant would do
+  python -m sotto collect          refresh state.json (only rewrites on change)
+  python -m sotto wall             run the live wallpaper (inside kitty's panel)
+  python -m sotto say "text"       make the mascot say something
+  python -m sotto preview out.png  render one frame to a PNG
+  python -m sotto ask "open youtube" [--do]   what the wallpaper assistant would do
 """
 import json
 import sys

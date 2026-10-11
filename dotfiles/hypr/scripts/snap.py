@@ -26,7 +26,7 @@ import time
 RUN = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 STATE = os.path.join(RUN, "hypr-max")             # shared with window-max.sh
 PIDFILE = os.path.join(RUN, "hypr-snap.pid")
-PREVIEW_SOCK = os.path.join(RUN, "jarvis-dock.sock")
+PREVIEW_SOCK = os.path.join(RUN, "sotto.sock")
 LOG = os.path.expanduser("~/.cache/hypr-snap.log")
 
 BAR = 26          # hyprbars title bar height

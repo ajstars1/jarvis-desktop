@@ -17,7 +17,7 @@ import sys
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-NAME = (os.environ.get("JARVIS_NAME") or os.environ.get("USER", "friend")).upper()
+NAME = (os.environ.get("SOTTO_NAME") or os.environ.get("USER", "friend")).upper()
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "amber-boot.png")
 FONT_PATHS = [
     os.path.expanduser("~/.local/share/fonts/DepartureMonoNerdFont-Regular.otf"),

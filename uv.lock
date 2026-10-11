@@ -11,26 +11,6 @@ wheels = [
 ]
 
 [[package]]
-name = "jarvis"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "pillow" },
-]
-
-[package.optional-dependencies]
-voice = [
-    { name = "piper-tts" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pillow", specifier = ">=12.3.0" },
-    { name = "piper-tts", marker = "extra == 'voice'", specifier = ">=1.8.0" },
-]
-provides-extras = ["voice"]
-
-[[package]]
 name = "numpy"
 version = "2.5.4"
 source = { registry = "https://pypi.org/simple" }
@@ -255,3 +235,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl", hash = "sha256:a300819d441e078a5608c0d3c709796bb548136058fda017ae51d425b44fd353", size = 456514, upload-time = "2026-09-17T20:07:57.188Z" },
     { url = "https://files.pythonhosted.org/packages/e4/04/d52c7016b04b6c5108f26691f9d33ec82a9b65d041f1a9c771137693d618/protobuf-7.36.2-py3-none-any.whl", hash = "sha256:bdb3a345d48db958e6ce1f18e508beb0cc981d64f24088427549c866cd039f1e", size = 179806, upload-time = "2026-09-17T20:07:58.211Z" },
 ]
+
+[[package]]
+name = "sotto"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "pillow" },
+]
+
+[package.optional-dependencies]
+voice = [
+    { name = "piper-tts" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pillow", specifier = ">=12.3.0" },
+    { name = "piper-tts", marker = "extra == 'voice'", specifier = ">=1.8.0" },
+]
+provides-extras = ["voice"]

@@ -3,7 +3,7 @@
 Always on screen: a quiet clock, one greeting line and your recent projects
 on light fresco parchment. Move the mouse over empty space and a faint trail
 of dots follows it and fades. Click a project to open it; right-click
-anywhere for the desktop menu. `python -m jarvis say "..."` shows a message
+anywhere for the desktop menu. `python -m sotto say "..."` shows a message
 in place of the greeting for a few seconds.
 """
 import json
@@ -31,7 +31,7 @@ from .scene import build
 FPS = 30
 REFRESH_EVERY = 300            # re-read projects/system this often (seconds)
 SAY_SECONDS = 8                # a `say` message stays this long
-PIDFILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jarvis-wall.pid")
+PIDFILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "sotto-wall.pid")
 LOG = collect.CACHE / "wall.log"
 
 MOUSE = re.compile(r"\x1b\[<(\d+);(\d+);(\d+)([Mm])")
@@ -119,7 +119,7 @@ class Wall:
             self.out.flush()
 
     def refresh_async(self):
-        if self.collecting or os.environ.get("JARVIS_DEMO"):
+        if self.collecting or os.environ.get("SOTTO_DEMO"):
             return                            # demo mode: show the given state.json as is
         self.collecting = True
 
@@ -235,7 +235,7 @@ class Wall:
     def tell_dock(self, msg: str):
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
-                s.sendto(msg.encode(), os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jarvis-dock.sock"))
+                s.sendto(msg.encode(), os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "sotto.sock"))
         except OSError:
             pass
 
