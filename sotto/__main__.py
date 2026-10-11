@@ -5,6 +5,7 @@
   python -m sotto say "text"       make the mascot say something
   python -m sotto preview out.png  render one frame to a PNG
   python -m sotto ask "open youtube" [--do]   what the wallpaper assistant would do
+  python -m sotto bootsplash DIR [--preview out.png]   render the boot screen theme into DIR
 """
 import json
 import sys
@@ -46,6 +47,19 @@ def main(argv: list[str]) -> int:
             print("action:", r["action"])
             if do:
                 assistant.run_action(r["action"])
+        return 0
+    if cmd == "bootsplash":
+        from pathlib import Path
+
+        from . import bootsplash
+
+        if "--preview" in argv:
+            i = argv.index("--preview")
+            print(f"wrote {bootsplash.preview(Path(argv[i + 1] if len(argv) > i + 1 else 'bootsplash.png'))}")
+            argv = argv[:i] + argv[i + 2:]
+        if len(argv) > 1:
+            for f in bootsplash.render(Path(argv[1])):
+                print(f"wrote {f}")
         return 0
     if cmd == "dump":
         print(json.dumps(collect.collect(), indent=1))

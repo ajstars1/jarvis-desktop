@@ -1,0 +1,24 @@
+#!/bin/sh
+# The sotto boot screen: a Plymouth theme in the wallpaper's style. Uses sudo.
+#   sotto-bootsplash          draw it, install it as the boot screen, rebuild the initramfs
+#   sotto-bootsplash --undo   go back to Ubuntu's boot screen
+set -e
+cd "$(dirname "$(readlink -f "$0")")/.."
+DEST=/usr/share/plymouth/themes/sotto
+LINK=/usr/share/plymouth/themes/default.plymouth
+
+if [ "${1:-}" = "--undo" ]; then
+    sudo update-alternatives --remove default.plymouth "$DEST/sotto.plymouth"
+    sudo rm -rf "$DEST"
+else
+    TMP="$(mktemp -d)"
+    trap 'rm -rf "$TMP"' EXIT
+    .venv/bin/python -m sotto bootsplash "$TMP" >/dev/null
+    sudo install -d -m 755 "$DEST"
+    sudo install -m 644 "$TMP"/* "$DEST"/
+    sudo update-alternatives --install "$LINK" default.plymouth "$DEST/sotto.plymouth" 150
+    sudo update-alternatives --set default.plymouth "$DEST/sotto.plymouth"
+fi
+echo "Rebuilding the initramfs, so the boot screen is there from the first second (about a minute)..."
+sudo update-initramfs -u
+echo "Done. You'll see it the next time you restart or shut down."
