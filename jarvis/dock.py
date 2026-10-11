@@ -226,7 +226,9 @@ class Dock(Gtk.Application):
             LS.set_layer(self.win, LS.Layer.TOP)
             for e in (LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
                 LS.set_anchor(self.win, e, True)
-            LS.set_keyboard_mode(self.win, LS.KeyboardMode.ON_DEMAND)
+            # never take the keyboard: on Hyprland a panel holding keyboard focus keeps it
+            # even when you click back into a window (typing and title-bar buttons stop working)
+            LS.set_keyboard_mode(self.win, LS.KeyboardMode.NONE)
         self.populate()
         self.apply_autohide()
         self.win.present()
