@@ -1,86 +1,84 @@
-/* App drawer (SUPER+SPACE): Launchpad-style icon grid on a warm umber veil.
+/* App list, used when the sotto dock isn't running (the dock has its own Apps list).
+   A floating list: name and what the app is on the left, icon on the right.
    Type to filter, arrows or mouse to pick, Enter or click to open, Esc to close. */
 
 configuration {
     show-icons: true;
     icon-theme: "Yaru";
-    drun-display-format: "{name}";
+    drun-display-format: "{name}[   <span size='small' foreground='#8f7759'>{generic}</span>]";
     display-drun: "";
 }
 
 * {
-    bg:    #ece2d0;
-    panel: #e2d4bd;
-    line:  #cdb99b;
-    dim:   #8f7759;
-    text:  #3d2c1f;
-    gold:  #a7783f;
+    bg:      #f3ebde;
+    surface: #e2d4bd;
+    line:    #cdb99b;
+    dim:     #8f7759;
+    text:    #3d2c1f;
 
     background-color: transparent;
-    text-color: @dim;
-    font: "DepartureMono Nerd Font 11px";
+    text-color: @text;
+    font: "Ubuntu Sans 11";
 }
 
 window {
-    fullscreen: true;
+    width: 420px;
+    location: center;
+    anchor: center;
     background-color: @bg;
-    padding: 9% 14%;
+    border: 1px;
+    border-color: @line;
+    border-radius: 16px;
+    padding: 12px 8px 8px 8px;
 }
 
 mainbox {
     children: [ "inputbar", "listview" ];
-    spacing: 44px;
+    spacing: 6px;
 }
 
 inputbar {
     children: [ "entry" ];
-    margin: 0 32%;
-    padding: 0 0 8px 0;
+    margin: 0 8px;
+    padding: 0 2px 10px 2px;
     border: 0 0 1px 0;
-    border-color: @line;
+    border-color: @surface;
 }
 
 entry {
-    text-color: @text;
-    placeholder: "search";
-    placeholder-color: @dim;
-    horizontal-align: 0.5;
+    font: "Ubuntu Sans 13";
+    placeholder: "Search apps";
+    placeholder-color: #b5a185;
     cursor: text;
 }
 
 listview {
-    columns: 6;
-    lines: 3;
-    fixed-columns: true;
+    lines: 8;
+    columns: 1;
     fixed-height: true;
-    flow: horizontal;
-    spacing: 22px 18px;
     scrollbar: false;
-    cycle: false;
+    spacing: 0;
 }
 
 element {
-    orientation: vertical;
-    padding: 14px 6px 10px 6px;
-    spacing: 10px;
-    border-radius: 12px;
+    children: [ "element-text", "element-icon" ];
+    orientation: horizontal;
+    padding: 6px 10px;
+    spacing: 12px;
+    border-radius: 10px;
     cursor: pointer;
 }
 
 element selected.normal,
 element selected.active {
-    background-color: @panel;
-    text-color: @text;
-}
-
-element-icon {
-    size: 52px;
-    horizontal-align: 0.5;
-    background-color: transparent;
+    background-color: @surface;
 }
 
 element-text {
-    horizontal-align: 0.5;
-    background-color: transparent;
+    vertical-align: 0.5;
     text-color: inherit;
+}
+
+element-icon {
+    size: 30px;
 }

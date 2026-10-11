@@ -5,7 +5,7 @@ pkill -x rofi && exit 0
 choice=$(printf '%s\n' "Apps" "Show desktop" "Files" "Terminal" "Browser" "Tile windows (full view)" "Float windows" "Dock settings" "Screenshot" "Lock" "Log out" "Restart" "Shut down" \
     | rofi -dmenu -i -no-custom -theme menu -p "")
 case "$choice" in
-    Apps)       rofi -show drun -theme drawer ;;
+    Apps)       ~/.config/hypr/scripts/apps.sh ;;
     "Show desktop") ~/.config/hypr/scripts/show-desktop.sh ;;
     Files)      nautilus --new-window ;;
     Terminal)   kitty ;;

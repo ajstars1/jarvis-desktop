@@ -9,6 +9,7 @@
 - right-click: its windows, New Window, Maximize, Keep in Dock / Remove,
   Quit, Dock Settings…
 - Dock Settings: pick, order and remove apps, icon size, auto-hide
+- Apps: a floating list of every app, with when you last used it
 
 Settings live in ~/.config/sotto/dock.json. Runs with the system python3
 (python3-gi); bin/sotto-dock preloads libgtk4-layer-shell as GTK requires.
@@ -19,6 +20,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import gi
@@ -27,7 +29,8 @@ import assistant  # the wallpaper assistant's brain (same folder)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+gi.require_version("Pango", "1.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 
 try:
     gi.require_foreign("cairo")       # needs python3-gi-cairo; without it, clicks after an answer close the prompt
@@ -50,6 +53,8 @@ except (ValueError, ImportError, GLib.Error):
     LS = None
 
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "sotto" / "dock.json"
+USAGE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "sotto" / "app-usage.json"
+GNOME_STATE = Path.home() / ".local/share/gnome-shell/application_state"   # GNOME's own last-used record
 LAUNCHPAD = "launchpad"
 DEFAULTS = {
     "pinned": [LAUNCHPAD, "org.gnome.Nautilus.desktop", "google-chrome.desktop", "kitty.desktop",
@@ -59,6 +64,8 @@ DEFAULTS = {
     "show_unpinned": True,
 }
 MARGIN = 8            # gap between dock and screen edge when shown
+DRAWER_W = 420        # width of the Apps list
+RECENT = 5            # apps shown under "Recent"
 SLIDE_MS = 180
 
 CSS = """
@@ -96,6 +103,30 @@ popover button { background: transparent; border: none; box-shadow: none; paddin
 popover button:hover { background: #e2d4bd; }
 popover .title { font-weight: bold; padding: 4px 10px 6px 10px; }
 popover separator { background: #cdb99b; margin: 4px 6px; }
+window.drawer-window { background: rgba(61, 44, 31, 0.08); }
+.drawer {
+    background: #f3ebde;
+    border: 1px solid #cdb99b;
+    border-radius: 16px;
+    padding: 12px 8px 8px 8px;
+    box-shadow: 0 18px 48px rgba(61, 44, 31, 0.20);
+}
+.drawer-search { margin: 0 8px 6px 8px; padding: 0 2px 10px 2px; border-bottom: 1px solid #e2d4bd; }
+.drawer-search image { color: #8f7759; }
+entry.drawer-entry { background: transparent; border: none; box-shadow: none; outline: none; padding: 0; min-height: 0;
+    color: #3d2c1f; caret-color: #a7783f; font-family: "Ubuntu Sans", sans-serif; font-size: 15px; }
+entry.drawer-entry > text > placeholder { color: #b5a185; }
+.drawer list { background: transparent; }
+.drawer row { background: transparent; border-radius: 10px; padding: 6px 10px; outline: none; }
+.drawer row:hover { background: rgba(226, 212, 189, 0.55); }
+.drawer row:selected { background: #e2d4bd; }
+.drawer row.heading-row, .drawer row.heading-row:hover { background: transparent; padding: 10px 10px 3px 10px; }
+.drawer-heading { color: #a08a6c; font-family: "DepartureMono Nerd Font"; font-size: 11px; letter-spacing: 1px; }
+.drawer-name { color: #3d2c1f; font-family: "Ubuntu Sans", sans-serif; font-size: 13px; }
+.drawer-meta { color: #8f7759; font-family: "DepartureMono Nerd Font"; font-size: 11px; }
+.drawer-meta.open { color: #a7783f; }
+.drawer-empty { color: #8f7759; font-family: "DepartureMono Nerd Font"; font-size: 11px; padding: 28px 0; }
+.drawer scrollbar slider { background: #cdb99b; min-width: 4px; }
 window.dock-settings, window.dock-settings > * { background: #ece2d0; color: #3d2c1f; }
 .dock-settings label { color: #3d2c1f; }
 .dock-settings .heading { font-weight: bold; margin-top: 8px; }
@@ -118,6 +149,44 @@ def save_config(cfg: dict):
     tmp = CONFIG.with_suffix(".tmp")
     tmp.write_text(json.dumps(cfg, indent=2))
     os.replace(tmp, CONFIG)
+
+
+def load_usage() -> dict:
+    """When each app was last used: {desktop id: unix time}. Apps it hasn't seen yet
+    get their time from GNOME's record, so the list is useful from the first day."""
+    try:
+        data = json.loads(USAGE.read_text())
+        usage = {k: float(v) for k, v in data.items()} if isinstance(data, dict) else {}
+    except (OSError, ValueError, TypeError):
+        usage = {}
+    try:
+        import xml.etree.ElementTree as ET
+        for el in ET.parse(GNOME_STATE).iter("application"):
+            app_id, seen = el.get("id"), el.get("last-seen")
+            if app_id and seen and app_id not in usage:
+                usage[app_id] = float(seen)
+    except (OSError, ValueError, ET.ParseError):
+        pass
+    return usage
+
+
+def save_usage(usage: dict):
+    USAGE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = USAGE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(usage, indent=1))
+    os.replace(tmp, USAGE)
+
+
+def ago(ts: float) -> str:
+    s = max(0.0, time.time() - ts)
+    if s < 60:
+        return "just now"
+    if s < 3600:
+        return f"{int(s // 60)}m ago"
+    if s < 86400:
+        return f"{int(s // 3600)}h ago"
+    d = int(s // 86400)
+    return "yesterday" if d == 1 else f"{d}d ago"
 
 
 # ── hyprland ─────────────────────────────────────────────────────────────
@@ -206,6 +275,9 @@ class Dock(Gtk.Application):
         self.popover_open = False
         self.settings_win = None
         self.refresh_pending = False
+        self.usage = load_usage()
+        self.usage_timer = 0
+        self.drawer = None
 
     # startup / command line
     def do_command_line(self, cmd):
@@ -250,6 +322,7 @@ class Dock(Gtk.Application):
         self.win.present()
         self.make_preview()
         self.make_prompt()
+        self.make_drawer()
         self.refresh_running()
         threading.Thread(target=self.listen, daemon=True).start()
         if self.cfg["autohide"]:
@@ -288,6 +361,14 @@ class Dock(Gtk.Application):
             GLib.idle_add(self.on_preview, msg)
 
     def on_preview(self, msg):
+        if msg and msg[0] == "apps":
+            if len(msg) > 1:                        # for testing and demos: open with a search typed in
+                self.open_drawer()
+                self.drawer_entry.set_text(" ".join(msg[1:]))
+                self.drawer_entry.set_position(-1)
+            else:
+                self.toggle_drawer()
+            return False
         if msg and msg[0] == "prompt" and len(msg) == 3:
             self.open_prompt(int(msg[1]), int(msg[2]))
             return False
@@ -465,6 +546,8 @@ class Dock(Gtk.Application):
         """Something else got focus (Alt+Tab, a top-bar click): close a prompt still being typed."""
         if self.prompt and self.prompt.get_visible() and not self.prompt_done:
             self.close_prompt()
+        if self.drawer and self.drawer.get_visible() and GLib.get_monotonic_time() - self.drawer_opened > 400_000:
+            self.close_drawer()
         return False
 
     def on_prompt_key(self, _ctrl, keyval, _code, _state):
@@ -547,11 +630,295 @@ class Dock(Gtk.Application):
         self.prompt_reply.set_text("")
         self.prompt_anim = GLib.timeout_add(14, tick)
 
+    # ── Apps: a floating list of every app ────────────────────────────────
+    # Same trick as the prompt: a transparent full-screen layer (below the top bar)
+    # holds the keyboard while open; a click outside the list or a focus change closes it.
+    def make_drawer(self):
+        if not LS:
+            return
+        w = Gtk.Window(application=self)
+        w.add_css_class("drawer-window")
+        panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+        panel.add_css_class("drawer")
+        panel.set_size_request(DRAWER_W, -1)
+        search = Gtk.Box(spacing=10)
+        search.add_css_class("drawer-search")
+        search.append(Gtk.Image.new_from_icon_name("system-search-symbolic"))
+        self.drawer_entry = Gtk.Entry(has_frame=False, hexpand=True, placeholder_text="Search apps")
+        self.drawer_entry.add_css_class("drawer-entry")
+        self.drawer_entry.connect("changed", lambda *_: self.fill_drawer())
+        search.append(self.drawer_entry)
+        self.drawer_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE, activate_on_single_click=True)
+        self.drawer_list.connect("row-activated", lambda _l, row: self.drawer_open(getattr(row, "app_id", None)))
+        self.drawer_scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
+        self.drawer_scroll.set_min_content_width(DRAWER_W - 16)
+        self.drawer_scroll.set_child(self.drawer_list)
+        panel.append(search)
+        panel.append(self.drawer_scroll)
+        self.drawer_panel = panel
+        w.set_child(panel)
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self.on_drawer_key)
+        w.add_controller(keys)
+        click = Gtk.GestureClick()
+        click.connect("pressed", self.on_drawer_click)
+        w.add_controller(click)
+        LS.init_for_window(w)
+        LS.set_namespace(w, "sotto-apps")
+        LS.set_layer(w, LS.Layer.TOP)
+        for e in (LS.Edge.TOP, LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
+            LS.set_anchor(w, e, True)
+        LS.set_exclusive_zone(w, 0)
+        LS.set_keyboard_mode(w, LS.KeyboardMode.NONE)
+        self.drawer = w
+        self.drawer_rows: dict[str, Gtk.ListBoxRow] = {}     # "all:<id>" / "recent:<id>" -> row
+        self.drawer_opened = 0
+
+    def toggle_drawer(self):
+        if self.drawer is None:
+            subprocess.Popen(["rofi", "-show", "drun", "-theme", "drawer"], start_new_session=True)
+        elif self.drawer.get_visible():
+            self.close_drawer()
+        else:
+            self.open_drawer()
+
+    def open_drawer(self):
+        self.close_prompt()
+        try:
+            mon_h = json.loads(hypr("monitors", "-j") or "[]")[0]["height"]
+        except (IndexError, KeyError, json.JSONDecodeError):
+            mon_h = 768
+        h = max(240, min(500, mon_h - 26 - 150))
+        self.drawer_scroll.set_min_content_height(h)
+        self.drawer_scroll.set_max_content_height(h)
+        if self.drawer_entry.get_text():
+            self.drawer_entry.set_text("")          # refills the list
+        else:
+            self.fill_drawer()
+        self.drawer_scroll.get_vadjustment().set_value(0)
+        self.drawer_opened = GLib.get_monotonic_time()
+        LS.set_keyboard_mode(self.drawer, LS.KeyboardMode.EXCLUSIVE)
+        self.drawer.set_visible(True)
+        self.drawer.present()
+        self.drawer_entry.grab_focus()
+
+    def close_drawer(self):
+        if self.drawer is None:
+            return
+        LS.set_keyboard_mode(self.drawer, LS.KeyboardMode.NONE)
+        self.drawer.set_visible(False)
+
+    def on_drawer_click(self, _gesture, _n, x, y):
+        widget = self.drawer.pick(x, y, Gtk.PickFlags.DEFAULT)
+        while widget is not None:
+            if widget is self.drawer_panel:
+                return
+            widget = widget.get_parent()
+        self.close_drawer()
+
+    def on_drawer_key(self, _ctrl, keyval, _code, _state):
+        name = Gdk.keyval_name(keyval)
+        if name == "Escape":
+            self.close_drawer()
+            return True
+        if name in ("Down", "Up", "Page_Down", "Page_Up"):
+            self.drawer_move({"Down": 1, "Up": -1, "Page_Down": 8, "Page_Up": -8}[name])
+            return True
+        if name in ("Return", "KP_Enter"):
+            row = self.drawer_list.get_selected_row()
+            self.drawer_open(getattr(row, "app_id", None) if row else None)
+            return True
+        return False
+
+    def drawer_move(self, step: int):
+        rows, row = [], self.drawer_list.get_first_child()
+        while row is not None:
+            if isinstance(row, Gtk.ListBoxRow) and row.get_selectable():
+                rows.append(row)
+            row = row.get_next_sibling()
+        if not rows:
+            return
+        cur = self.drawer_list.get_selected_row()
+        i = rows.index(cur) if cur in rows else -1
+        target = rows[max(0, min(len(rows) - 1, i + step))]
+        self.drawer_list.select_row(target)
+        adj = self.drawer_scroll.get_vadjustment()
+        if target is rows[0]:
+            adj.set_value(0)                         # show the heading above the first row too
+            return
+        ok, b = target.compute_bounds(self.drawer_list)
+        if ok:
+            top, bottom = b.get_y(), b.get_y() + b.get_height()
+            if top < adj.get_value():
+                adj.set_value(top)
+            elif bottom > adj.get_value() + adj.get_page_size():
+                adj.set_value(bottom - adj.get_page_size())
+
+    def drawer_open(self, app_id):
+        if not app_id:
+            return
+        self.close_drawer()
+        if self.running.get(app_id):
+            self.on_click(app_id)                    # already open: bring it forward, like the dock
+            self.note_used(app_id)
+        else:
+            self.launch(app_id)
+
+    def app_meta(self, app_id: str, app) -> tuple[str, bool]:
+        """The grey line under an app's name: open now / when it was last used, and what it is."""
+        parts, is_open = [], False
+        wins = self.running.get(app_id, [])
+        if wins:
+            parts.append("open now" + (f" · {len(wins)} windows" if len(wins) > 1 else ""))
+            is_open = True
+        elif app_id in self.usage:
+            parts.append("used " + ago(self.usage[app_id]))
+        kind = (app.get_generic_name() or "").strip()
+        if not kind or kind.lower() in app.get_display_name().lower():     # "Brave Web Browser · Web Browser"
+            kind = (app.get_description() or "").split(". ")[0].strip().rstrip(".")
+            if len(kind) > 44:
+                kind = kind[:43].rstrip() + "…"
+        if not kind:
+            cats = [c for c in (app.get_categories() or "").split(";") if c and c not in ("GTK", "GNOME", "Qt", "KDE", "Application")]
+            kind = cats[0] if cats else ""
+        if kind:
+            parts.append(kind)
+        return " · ".join(parts) or " ", is_open
+
+    def drawer_row(self, key: str, app) -> Gtk.ListBoxRow:
+        row = self.drawer_rows.get(key)
+        if row is None:
+            row = Gtk.ListBoxRow()
+            box = Gtk.Box(spacing=12)
+            text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True, valign=Gtk.Align.CENTER)
+            name = Gtk.Label(label=app.get_display_name(), xalign=0, ellipsize=Pango.EllipsizeMode.END, max_width_chars=34)
+            name.add_css_class("drawer-name")
+            meta = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END, max_width_chars=44)
+            meta.add_css_class("drawer-meta")
+            text.append(name)
+            text.append(meta)
+            icon = app.get_icon()
+            img = Gtk.Image.new_from_gicon(icon) if icon else Gtk.Image.new_from_icon_name("application-x-executable")
+            img.set_pixel_size(30)
+            box.append(text)
+            box.append(img)
+            row.set_child(box)
+            row.app_id, row.meta = app.get_id(), meta
+            rc = Gtk.GestureClick(button=3)
+            rc.connect("pressed", lambda *_, r=row: self.on_drawer_menu(r))
+            row.add_controller(rc)
+            self.drawer_rows[key] = row
+        label, is_open = self.app_meta(row.app_id, app)
+        row.meta.set_text(label)
+        (row.meta.add_css_class if is_open else row.meta.remove_css_class)("open")
+        return row
+
+    def drawer_heading(self, text: str) -> Gtk.ListBoxRow:
+        key = "heading:" + text
+        row = self.drawer_rows.get(key)
+        if row is None:
+            label = Gtk.Label(label=text.upper(), xalign=0)
+            label.add_css_class("drawer-heading")
+            row = Gtk.ListBoxRow(selectable=False, activatable=False, child=label)
+            row.add_css_class("heading-row")
+            self.drawer_rows[key] = row
+        return row
+
+    def fill_drawer(self):
+        apps = [a for a in self.apps.all if a.should_show()]
+        live = {a.get_id() for a in apps}
+        for key in [k for k in self.drawer_rows if k.split(":", 1)[1] not in live and not k.startswith("heading:")]:
+            del self.drawer_rows[key]                 # uninstalled since last time
+        q = self.drawer_entry.get_text().strip().lower()
+        self.drawer_list.remove_all()
+        used = lambda a: self.usage.get(a.get_id(), 0.0)  # noqa: E731
+        if not q:
+            recent = sorted((a for a in apps if used(a)), key=used, reverse=True)[:RECENT]
+            if recent:
+                self.drawer_list.append(self.drawer_heading("Recent"))
+                for a in recent:
+                    self.drawer_list.append(self.drawer_row("recent:" + a.get_id(), a))
+                self.drawer_list.append(self.drawer_heading("All apps"))
+            for a in sorted(apps, key=lambda a: a.get_display_name().lower()):
+                self.drawer_list.append(self.drawer_row("all:" + a.get_id(), a))
+            return
+        scored = []
+        for a in apps:
+            name = a.get_display_name().lower()
+            extra = " ".join([a.get_generic_name() or "", " ".join(a.get_keywords() or []), a.get_id()]).lower()
+            if name.startswith(q):
+                score = 3
+            elif any(w.startswith(q) for w in name.replace("-", " ").split()):
+                score = 2
+            elif any(w.startswith(q) for w in extra.replace(";", " ").split()):
+                score = 1.6                          # "br" finds browsers before LibreOffice
+            elif q in name:
+                score = 1.5
+            elif q in extra:
+                score = 1
+            else:
+                continue
+            scored.append((-score, -used(a), name, a))
+        if not scored:
+            empty = Gtk.ListBoxRow(selectable=False, activatable=False, child=Gtk.Label(label="no apps match"))
+            empty.get_child().add_css_class("drawer-empty")
+            self.drawer_list.append(empty)
+            return
+        for *_, a in sorted(scored, key=lambda t: t[:3]):
+            self.drawer_list.append(self.drawer_row("all:" + a.get_id(), a))
+        first = self.drawer_list.get_row_at_index(0)
+        self.drawer_list.select_row(first)            # Enter opens the best match
+        self.drawer_scroll.get_vadjustment().set_value(0)
+
+    def on_drawer_menu(self, row: Gtk.ListBoxRow):
+        app_id = row.app_id
+        pop = Gtk.Popover(has_arrow=False, position=Gtk.PositionType.BOTTOM)
+        pop.set_parent(row)
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        pop.set_child(col)
+
+        def item(label, fn):
+            b = Gtk.Button(label=label, halign=Gtk.Align.FILL)
+            b.get_child().set_xalign(0)
+            b.connect("clicked", lambda *_: (pop.popdown(), fn()))
+            col.append(b)
+
+        item("Open", lambda: self.drawer_open(app_id))
+        if self.running.get(app_id):
+            item("New Window", lambda: (self.close_drawer(), self.launch(app_id)))
+        pinned = app_id in self.cfg["pinned"]
+        item("Remove from Dock" if pinned else "Keep in Dock", lambda: self.set_pinned(app_id, not pinned))
+        pop.connect("closed", lambda *_: GLib.idle_add(pop.unparent))
+        pop.popup()
+
+    # last used: the focused window's app, and anything opened from the dock or the list
+    def note_used_class(self, cls: str):
+        if cls.startswith("sotto-"):
+            return False
+        app = self.apps.for_class(cls)
+        if app is not None:
+            self.note_used(app.get_id())
+        return False
+
+    def note_used(self, app_id: str):
+        self.usage[app_id] = time.time()
+        if not self.usage_timer:
+            def flush():
+                self.usage_timer = 0
+                try:
+                    save_usage(self.usage)
+                except OSError:
+                    pass
+                return False
+            self.usage_timer = GLib.timeout_add_seconds(20, flush)
+
     def launch_app_id(self, app_id: str) -> bool:
         app = self.apps.get(app_id)
         if not app:
             return False
         app.launch([], Gdk.Display.get_default().get_app_launch_context())
+        self.note_used(app_id)
         return True
 
     # items
@@ -650,6 +1017,11 @@ class Dock(Gtk.Application):
             *lines, buf = buf.split(b"\n")
             if any(ln.startswith(b"activewindowv2") for ln in lines):
                 GLib.idle_add(self.on_focus_event)
+            for ln in lines:
+                if ln.startswith(b"activewindow>>"):          # class,title of the focused window
+                    cls = ln[14:].split(b",", 1)[0].decode(errors="ignore")
+                    if cls:
+                        GLib.idle_add(self.note_used_class, cls)
             if any(ln.startswith((b"openwindow", b"closewindow", b"movewindow", b"windowtitle")) for ln in lines):
                 if not self.refresh_pending:
                     self.refresh_pending = True
@@ -658,11 +1030,12 @@ class Dock(Gtk.Application):
     # clicks
     def launch(self, app_id: str):
         if app_id == LAUNCHPAD:
-            subprocess.Popen(["rofi", "-show", "drun", "-theme", "drawer"], start_new_session=True)
+            self.toggle_drawer()
             return
         app = self.apps.get(app_id)
         if app:
             app.launch([], Gdk.Display.get_default().get_app_launch_context())
+            self.note_used(app_id)
 
     def on_click(self, app_id: str):
         wins = sorted(self.running.get(app_id, []), key=lambda c: c.get("focusHistoryID", 0))

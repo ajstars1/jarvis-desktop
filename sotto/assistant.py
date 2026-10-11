@@ -359,7 +359,7 @@ def run_action(action, launch_app=None):
     elif kind == "project":
         hypr_exec("kitty --directory " + _q(action["path"]))
     elif kind == "drawer":
-        hypr_exec("rofi -show drun -theme drawer")
+        hypr_exec(os.path.expanduser("~/.config/hypr/scripts/apps.sh"))
     elif kind == "app":
         if launch_app and launch_app(action["id"]):
             return

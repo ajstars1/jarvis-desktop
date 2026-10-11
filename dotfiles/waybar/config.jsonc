@@ -103,7 +103,7 @@
     "custom/apps": {
       "format": "󰀻",
       "tooltip-format": "All apps",
-      "on-click": "hyprctl dispatch exec 'rofi -show drun -theme drawer'",
+      "on-click": "~/.config/hypr/scripts/apps.sh",
       "on-click-right": "~/.config/hypr/scripts/desktop-menu.sh"
     },
     "hyprland/workspaces": {
