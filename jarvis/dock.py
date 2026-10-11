@@ -313,13 +313,17 @@ class Dock(Gtk.Application):
         return False
 
     # ── wallpaper prompt: double-click the wallpaper, type, Enter ──────────
+    # The prompt lives in a transparent full-screen layer (kept below the top bar).
+    # While you type it holds the keyboard, and Hyprland then won't move focus on a
+    # click elsewhere, so the transparent area catches that click and closes the
+    # prompt, like any popup. After Enter it only listens on the box itself.
     def make_prompt(self):
         self.prompt = None
         if not LS:
             return
         w = Gtk.Window(application=self)
         w.add_css_class("prompt-window")
-        w.set_resizable(False)
+        self.prompt_fixed = Gtk.Fixed()
         col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         col.add_css_class("prompt")
         row = Gtk.Box(spacing=8)
@@ -335,19 +339,21 @@ class Dock(Gtk.Application):
         self.prompt_reply.add_css_class("prompt-reply")
         col.append(row)
         col.append(self.prompt_reply)
-        w.set_child(col)
+        self.prompt_box = col
+        self.prompt_fixed.put(col, 0, 0)
+        w.set_child(self.prompt_fixed)
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self.on_prompt_key)
         w.add_controller(keys)
         click = Gtk.GestureClick()
-        click.connect("pressed", lambda *_: self.reask() if self.prompt_done else None)
+        click.connect("pressed", self.on_prompt_click)
         w.add_controller(click)
         LS.init_for_window(w)
         LS.set_namespace(w, "jarvis-prompt")
         LS.set_layer(w, LS.Layer.TOP)
-        LS.set_anchor(w, LS.Edge.TOP, True)
-        LS.set_anchor(w, LS.Edge.LEFT, True)
-        LS.set_exclusive_zone(w, -1)
+        for e in (LS.Edge.TOP, LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
+            LS.set_anchor(w, e, True)
+        LS.set_exclusive_zone(w, 0)          # stays below the top bar, so the bar keeps working
         LS.set_keyboard_mode(w, LS.KeyboardMode.NONE)
         self.prompt = w
         self.prompt_timer = 0
@@ -356,14 +362,47 @@ class Dock(Gtk.Application):
         self.prompt_history: list[str] = []
         self.history_at = 0
 
+    def inside_prompt_box(self, x: float, y: float) -> bool:
+        widget = self.prompt.pick(x, y, Gtk.PickFlags.DEFAULT)
+        while widget is not None:
+            if widget is self.prompt_box:
+                return True
+            widget = widget.get_parent()
+        return False
+
+    def on_prompt_click(self, _gesture, _n, x, y):
+        if not self.inside_prompt_box(x, y):
+            self.close_prompt()              # a click anywhere else closes it
+        elif self.prompt_done:
+            self.reask()                     # click the answer to ask something new
+
+    def set_prompt_input(self, box_only: bool):
+        """Where the prompt layer accepts clicks: everywhere (while typing) or just the box."""
+        surf = self.prompt.get_surface()
+        if surf is None:
+            return
+        try:
+            import cairo
+        except ImportError:
+            return
+        if box_only:
+            a = self.prompt_box.get_allocation()
+            region = cairo.Region(cairo.RectangleInt(a.x, a.y, max(1, a.width), max(1, a.height) + 220))
+        else:
+            region = cairo.Region(cairo.RectangleInt(0, 0, 10000, 10000))
+        surf.set_input_region(region)
+
     def open_prompt(self, x: int, y: int):
         if not self.prompt:
             return
         geo = Gdk.Display.get_default().get_monitors().get_item(0).get_geometry()
+        try:
+            top = json.loads(hypr("monitors", "-j") or "[]")[0]["reserved"][1]
+        except (IndexError, KeyError, json.JSONDecodeError):
+            top = 26
         x = max(8, min(x - 16, geo.width - 480))
-        y = max(30, min(y - 10, geo.height - 190))
-        LS.set_margin(self.prompt, LS.Edge.LEFT, x)
-        LS.set_margin(self.prompt, LS.Edge.TOP, y)
+        y = max(4, min(y - 10 - top, geo.height - top - 190))
+        self.prompt_fixed.move(self.prompt_box, x, y)
         self.reask()
 
     def reask(self):
@@ -377,6 +416,7 @@ class Dock(Gtk.Application):
         LS.set_keyboard_mode(self.prompt, LS.KeyboardMode.EXCLUSIVE)
         self.prompt.set_visible(True)
         self.prompt.present()
+        self.set_prompt_input(box_only=False)
         self.prompt_entry.grab_focus()
         self.arm_prompt_close(60)
 
@@ -401,6 +441,12 @@ class Dock(Gtk.Application):
 
         self.prompt_timer = GLib.timeout_add_seconds(seconds, done)
 
+    def on_focus_event(self):
+        """Something else got focus (Alt+Tab, a top-bar click): close a prompt still being typed."""
+        if self.prompt and self.prompt.get_visible() and not self.prompt_done:
+            self.close_prompt()
+        return False
+
     def on_prompt_key(self, _ctrl, keyval, _code, _state):
         name = Gdk.keyval_name(keyval)
         if name == "Escape":
@@ -423,6 +469,7 @@ class Dock(Gtk.Application):
         self.prompt_done = True
         entry.set_editable(False)
         LS.set_keyboard_mode(self.prompt, LS.KeyboardMode.NONE)   # hand the keyboard straight back
+        self.set_prompt_input(box_only=True)                       # and stop catching clicks elsewhere
         local = assistant.handle(text)
         if local:
             self.show_reply(local["reply"])
@@ -581,6 +628,8 @@ class Dock(Gtk.Application):
                 return
             buf += data
             *lines, buf = buf.split(b"\n")
+            if any(ln.startswith(b"activewindowv2") for ln in lines):
+                GLib.idle_add(self.on_focus_event)
             if any(ln.startswith((b"openwindow", b"closewindow", b"movewindow", b"windowtitle")) for ln in lines):
                 if not self.refresh_pending:
                     self.refresh_pending = True
