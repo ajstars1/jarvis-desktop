@@ -1,5 +1,7 @@
 # sotto
 
+*from* sotto voce, *Italian for "in a quiet voice", and* sotto, *"underneath": where a wallpaper lives.*
+
 **A wallpaper that's alive.** It knows what you're working on, it redraws itself from a JSON file, scripts can talk to it, and you can double-click it to ask anything.
 
 ![the living wallpaper](docs/wallpaper.gif)
