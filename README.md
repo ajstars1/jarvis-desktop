@@ -43,10 +43,12 @@ Most requests never leave your computer. They're understood locally and happen i
 | `how much ram` · `what time is it` · `cpu temp` · `ip` | answers from the system |
 | `lock` · `screenshot` · `volume up` · `mute` | does it |
 | `how do I snap windows?` · `how do I minimize?` · `help` | explains this desktop |
+| `shortcuts` · `how do I open a terminal?` · `which key opens the browser?` | the keyboard shortcuts, from the same list `Super+F1` shows (it opens that list too) |
 
 **Real questions** ("what is a fresco?", "how does git rebase work?") go to **Claude Haiku** through your Claude Code login and come back in two or three sentences (about 3–6 s):
 - It runs as `claude -p` with **no tools, no MCP servers and no saved session**.
-- Claude can only *ask* for one of three safe actions (open a URL, open an app, search), which the desktop then carries out. It never runs commands.
+- It gets the desktop's shortcut list with every question, so "how do I move a window to another workspace?" gets this desktop's answer, not a generic Linux one.
+- Claude can only *ask* for one of four safe actions (open a URL, open an app, search, show the shortcuts), which the desktop then carries out. It never runs commands.
 - Without Claude Code installed, everything in the table above still works.
 
 It behaves like a popup:

@@ -1,29 +1,36 @@
-SUPER + ENTER            terminal (kitty)
-SUPER + SPACE            app launcher
-SUPER + D                show desktop (again: bring windows back)
-SUPER + B                browser
-SUPER + H                summon / vanish the home screen
-SUPER + SHIFT + B        hide / show the bar
+SUPER + ENTER            terminal (kitty) · also CTRL + ALT + T
+SUPER + SPACE            all apps
+SUPER + B                browser (Firefox)
 SUPER + E                files
-SUPER + Q                close window
-SUPER + F                fullscreen
-SUPER + M                maximize (keeps the bar)
-SUPER + V                float / tile the window
+SUPER + Q                close the window
+ALT + TAB                next window (ALT + SHIFT + TAB: previous)
+SUPER + D                show desktop (again: bring the windows back)
+SUPER + M                maximize / restore
 SUPER + N                minimize
-SUPER + SHIFT + N        bring back the last minimized
-SUPER + J                flip split direction
+SUPER + SHIFT + N        bring back the last minimized window
+SUPER + F                fullscreen
+SUPER + V                float / tile the window
+SUPER + J                flip the split direction of tiled windows
 SUPER + ARROWS           move focus
-SUPER + SHIFT + ARROWS   move window
-SUPER + CTRL + ARROWS    resize window
+SUPER + SHIFT + ARROWS   move the window
+SUPER + CTRL + ARROWS    resize the window
 SUPER + 1..0             switch workspace
-SUPER + SHIFT + 1..0     send window to workspace
+SUPER + SHIFT + 1..0     send the window to a workspace
 SUPER + `                drop-down scratch workspace
-SUPER + SHIFT + `        send window to scratch
-SUPER + L                lock screen
+SUPER + SHIFT + `        send the window to the scratch workspace
+SUPER + L                lock the screen
 SUPER + SHIFT + V        clipboard history
+SUPER + SHIFT + E        power menu: lock, log out, restart, shut down
+SUPER + H                refresh the wallpaper's project list
+SUPER + SHIFT + B        hide / show the top bar
 SUPER + SHIFT + C        CRT effect: off > scanlines > amber
-SUPER + SHIFT + E        power menu
-SUPER + SHIFT + R        reload config
+SUPER + SHIFT + R        reload the desktop config
+SUPER + F1               this list
 PRINT                    screenshot an area
 SHIFT + PRINT            screenshot the whole screen
-SUPER + DRAG             move (left) / resize (right)
+SUPER + DRAG             move a window (left button) / resize it (right button)
+DOUBLE-CLICK WALLPAPER   ask the wallpaper assistant
+RIGHT-CLICK WALLPAPER    desktop menu
+DRAG A TITLE BAR         to an edge to snap: half, quarter, top to maximize
+DOUBLE-CLICK TITLE BAR   maximize / restore
+MOUSE TO BOTTOM EDGE     the dock slides up

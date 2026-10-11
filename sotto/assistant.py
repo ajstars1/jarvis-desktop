@@ -3,7 +3,8 @@
 Small requests are understood and done locally, instantly and for free:
 opening apps, websites, folders and your projects, web and YouTube searches,
 system info (time, RAM, disk, temperature, IP), lock, screenshot, volume,
-and how-to questions about this desktop. Anything else is a real question
+how-to questions about this desktop, and its keyboard shortcuts (read from
+the same cheatsheet Super+F1 shows, so Claude knows them too). Anything else is a real question
 and goes to Claude (Haiku, through the Claude Code login), answered in a
 couple of sentences. Claude can only ask for the same safe actions; it never
 runs commands.
@@ -24,6 +25,9 @@ from pathlib import Path
 HOME = Path.home()
 STATE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "sotto" / "state.json"
 WORKDIR = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "sotto" / "assistant"
+CHEATSHEET = [HOME / ".config/hypr/cheatsheet.txt",                               # the live config
+              Path(__file__).resolve().parent.parent / "dotfiles/hypr/cheatsheet.txt"]  # the repo's copy
+SHOW_SHORTCUTS = {"type": "cmd", "argv": [str(HOME / ".config/hypr/scripts/cheatsheet.sh")]}
 APP_DIRS = [
     HOME / ".local/share/applications",
     HOME / ".local/share/flatpak/exports/share/applications",
@@ -60,19 +64,20 @@ ALIASES = {  # everyday words -> what to open
 
 HELP = ("Try: open blender · open youtube · play lofi on youtube · search best laptops · "
         "open downloads · open <a project> · how much ram · what time is it · lock · screenshot · "
-        "volume up · how do I snap windows. Anything else, just ask.")
+        "volume up · shortcuts · how do I snap windows. Anything else, just ask.")
 
 # questions about this desktop, answered locally
 HOWTO = [
     (r"\bsnap|half (the )?screen|side by side|split screen", "Drag a window by its title bar to the left or right edge for half the screen, the top edge to maximize, or a corner for a quarter. Pause there for a moment and it snaps."),
-    (r"minimi[sz]e", "Click – on the title bar, or click the app's icon in the top bar while you're in it. Click the icon again to bring it back."),
-    (r"maximi[sz]e|full ?screen|bigger", "Click + on the title bar, or double-click the title bar. Do it again to go back."),
+    (r"minimi[sz]e", "Click – on the title bar, click the app's icon in the top bar while you're in it, or press Super+N. Click the icon again to bring it back."),
+    (r"maximi[sz]e|full ?screen|bigger", "Click + on the title bar, double-click the title bar, or press Super+M. Do it again to go back."),
     (r"\bclose\b", "Click × on the title bar, or press Super+Q."),
     (r"\bdock\b", "Move the mouse to the bottom edge and the dock slides up. Right-click an icon for its menu and Dock Settings."),
     (r"drawer|all (my )?apps|launcher|find (an )?app", "Click the dotted grid at the top left or the first dock icon, or press Super+Space, then type to search."),
-    (r"shortcut|keyboard|hotkey", "Super+F1 shows every shortcut. Handy ones: Super+Space apps, Alt+Tab switch, Super+Q close, Ctrl+Alt+T terminal, Super+L lock."),
-    (r"switch|alt.?tab|between (windows|apps)", "Click an app in the top bar, or press Alt+Tab."),
+    (r"switch(?!.*workspace)|alt.?tab|between (windows|apps)", "Click an app in the top bar, or press Alt+Tab."),
     (r"\block", "Press Super+L, or type lock here."),
+    (r"shut ?down|turn (it |the \w+ )?off|power (off|down)|restart|reboot|log ?out|sign out",
+     "Click OFF at the top right, or press Super+Shift+E, for lock, log out, restart and shut down."),
     (r"screenshot|screen ?shot", "Press Print to pick an area or Shift+Print for the whole screen; it's copied and saved in Pictures/Screenshots. Or type screenshot here."),
     (r"wallpaper|this (box|prompt|thing)|what (is|are) you|who are you", "I'm the assistant on your wallpaper. Double-click anywhere on the wallpaper, type, and press Enter. Esc or a click elsewhere closes me."),
 ]
@@ -83,8 +88,86 @@ SYSTEM_PROMPT = (
     "drag-to-edge snapping and a right-click desktop menu. Reply in plain text with no markdown, at most "
     "three short sentences, friendly and direct. If the user wants something done on the computer, end with "
     "one line that is exactly one of: 'ACTION: open_url <url>', 'ACTION: open_app <app name>', "
-    "'ACTION: search <query>'. Never claim to have done anything else."
+    "'ACTION: search <query>', 'ACTION: show_shortcuts' (opens the full list of shortcuts). "
+    "Never claim to have done anything else."
 )
+SUMMARY_KEYS = ["SUPER + ENTER", "SUPER + SPACE", "SUPER + Q", "ALT + TAB", "SUPER + D"]
+STOP = set("how do does did can could i me my you your to the a an of on in for with and or is are it this that "
+           "what which where when key keys shortcut shortcuts press hit use using get make open opens system "
+           "computer pc laptop desktop here there check see show tell way want need please turn off all new set".split())
+WEAK = {"window", "screen"}       # in too many lines to pick one on their own
+
+
+def shortcuts() -> list[tuple[str, str]]:
+    """(keys, what it does) from the cheatsheet, in its order (most useful first)."""
+    for path in CHEATSHEET:
+        try:
+            lines = path.read_text().splitlines()
+        except OSError:
+            continue
+        found = [tuple(re.split(r"\s{2,}", ln.strip(), maxsplit=1)) for ln in lines if re.search(r"\S\s{2,}\S", ln)]
+        if found:
+            return found
+    return []
+
+
+def nice_keys(keys: str) -> str:
+    """SUPER + ENTER -> Super+Enter; DOUBLE-CLICK WALLPAPER -> Double-click wallpaper."""
+    if "+" not in keys:
+        return keys.capitalize() if " " in keys else keys.title()
+    return "+".join(k.strip().title() if k.strip().isalpha() else k.strip() for k in keys.split("+"))
+
+
+def nice_text(desc: str) -> str:
+    return re.sub(r"\b[A-Z]+(?: \+ [A-Z0-9`]+)+", lambda m: nice_keys(m.group(0)), desc)
+
+
+def system_prompt() -> str:
+    lines = [f"{nice_keys(k)}: {nice_text(d)}" for k, d in shortcuts()]
+    if not lines:
+        return SYSTEM_PROMPT
+    return (SYSTEM_PROMPT + " Questions about how to use this computer, its keys, shortcuts or 'commands' are about "
+            "this desktop: answer from this list first (Super is the Windows key), and mention that Super+F1 "
+            "shows all of it.\n" + "\n".join(lines))
+
+
+def _stem(w: str) -> str:
+    w = {"minimise": "minimize", "maximise": "maximize", "screenshots": "screenshot"}.get(w, w)
+    return w[:-1] if len(w) > 4 and w.endswith("s") else w
+
+
+def shortcut_for(low: str):
+    """The one shortcut a question is about ("how do I open a terminal"), if it clearly names one.
+    A tie between two lines means it's not clear: Claude, who has the whole list, answers instead."""
+    words = {_stem(w) for w in re.findall(r"[a-z]+", low) if w not in STOP and len(w) > 2}
+    best, best_score, tied = None, 0, False
+    for keys, desc in shortcuts():
+        dwords = {_stem(w) for w in re.findall(r"[a-z]+", desc.lower())}
+        strong = len((words - WEAK) & dwords)
+        score = strong * 2 + len(words & WEAK & dwords)
+        if strong and score > best_score:
+            best, best_score, tied = (keys, desc), score, False
+        elif strong and score == best_score:
+            tied = True
+    if not best or tied:
+        return None
+    keys, desc = best
+    gesture = re.search(r"CLICK|DRAG|MOUSE", keys) and "+" not in keys
+    return reply(f"{nice_keys(keys)}: {nice_text(desc)}." if gesture else f"Press {nice_keys(keys)}: {nice_text(desc)}.")
+
+
+def shortcut_list():
+    table = dict(shortcuts())
+    short = {k: re.split(r" \(| ·|:", d)[0] for k, d in table.items()}    # "terminal (kitty) · ..." -> "terminal"
+    picks = [f"{nice_keys(k)} {short[k]}" for k in SUMMARY_KEYS if k in short]
+    if not picks:
+        return reply("Press Super+F1 for the list of shortcuts.", SHOW_SHORTCUTS)
+    return reply("The main ones (Super is the Windows key): " + " · ".join(picks) +
+                 ". I've opened the full list; Super+F1 shows it any time.", SHOW_SHORTCUTS)
+
+
+LIST_ASK = re.compile(r"\b(short ?cuts?|hot ?keys?|key ?binds?|key ?bindings?|keyboard|super( key| button)?|"
+                      r"windows key|keys|comm?ands?|cmds?)\b")
 
 
 def reply(text, action=None):
@@ -251,6 +334,12 @@ def handle(text: str):
         for pattern, answer in HOWTO:
             if re.search(pattern, low):
                 return reply(answer)
+    if is_question or LIST_ASK.search(low):
+        r = shortcut_for(low) if is_question or re.search(r"\b(key|shortcut)", low) else None
+        if r:
+            return r
+        if LIST_ASK.search(low):
+            return shortcut_list()
 
     m = (re.match(r"^(?:play|search|find|watch|look up)\s+(.+?)\s+(?:on|in)\s+youtube$", low)
          or re.match(r"^(?:search\s+)?youtube\s+(?:for\s+)?(.+)$", low))
@@ -314,7 +403,7 @@ def ask(question: str, timeout: int = 45):
         return reply("I can only do quick local things right now (Claude isn't installed).")
     WORKDIR.mkdir(parents=True, exist_ok=True)
     cmd = [claude, "-p", "--model", "haiku", "--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-           "--no-session-persistence", "--setting-sources", "", "--system-prompt", SYSTEM_PROMPT, question]
+           "--no-session-persistence", "--setting-sources", "", "--system-prompt", system_prompt(), question]
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=WORKDIR)
     except subprocess.TimeoutExpired:
@@ -334,6 +423,8 @@ def ask(question: str, timeout: int = 45):
             action = url_action(arg)
         elif verb == "search" and arg:
             action = url_action("https://www.google.com/search?q=" + urllib.parse.quote_plus(arg))
+        elif verb == "show_shortcuts":
+            action = SHOW_SHORTCUTS
         elif verb == "open_app" and arg:
             app = find_app(arg)
             action = {"type": "app", "id": app["id"], "path": app["path"]} if app else None
