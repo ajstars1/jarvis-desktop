@@ -134,7 +134,7 @@ def is_workspace_root(p: Path) -> bool:
 
 def resolve_project(p: Path):
     """A git repo is a project; a folder with 1-2 repos inside maps to the most
-    recently committed one (e.g. VitalPaw -> VitalPaw/vitalpaw); a folder that
+    recently committed one (e.g. MyApp -> MyApp/app); a folder that
     holds many repos is a workspace root, not a project."""
     kids = [k for k in child_repos(p) if not is_workspace_root(k)]
     if is_repo(p):

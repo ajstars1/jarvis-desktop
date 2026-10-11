@@ -403,8 +403,9 @@ class Dock(Gtk.Application):
             return
         try:
             if box_only:
-                a = self.prompt_box.get_allocation()
-                region = cairo.Region(cairo.RectangleInt(a.x, a.y, max(1, a.width), max(1, a.height) + 220))
+                ok, b = self.prompt_box.compute_bounds(self.prompt)
+                x, y, w, h = (int(b.get_x()), int(b.get_y()), int(b.get_width()), int(b.get_height())) if ok else (0, 0, 1, 1)
+                region = cairo.Region(cairo.RectangleInt(x, y, max(1, w), max(1, h) + 220))
             else:
                 region = cairo.Region(cairo.RectangleInt(0, 0, 10000, 10000))
             surf.set_input_region(region)

@@ -1,5 +1,5 @@
 """Pixel art: a big headline font cut from DepartureMono itself, and the
-mascot, a pixel puppy wearing a VitalPaw collar.
+mascot, a pixel puppy wearing a sensor collar.
 
 Each art pixel becomes half a terminal cell (▀ ▄ █). A 7x14 cell is then two
 7x7 squares, so the art keeps square pixels on screen.
@@ -94,7 +94,7 @@ def pup(eyes: str = "open", mouth: str = "smile") -> list[str]:
     ell(16.0, 24.0, 7.5, 3.6, "a")     # chest
     ell(16.0, 18.2, 6.6, 4.3, "h")     # muzzle
 
-    for y in (22, 23):                 # the VitalPaw collar...
+    for y in (22, 23):                 # the collar...
         for x in range(W):
             if g[y][x] in "ah":
                 g[y][x] = "c"

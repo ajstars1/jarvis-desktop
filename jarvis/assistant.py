@@ -59,7 +59,7 @@ ALIASES = {  # everyday words -> what to open
 }
 
 HELP = ("Try: open blender · open youtube · play lofi on youtube · search best laptops · "
-        "open downloads · open vitalpaw · how much ram · what time is it · lock · screenshot · "
+        "open downloads · open <a project> · how much ram · what time is it · lock · screenshot · "
         "volume up · how do I snap windows. Anything else, just ask.")
 
 # questions about this desktop, answered locally
