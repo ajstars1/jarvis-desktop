@@ -12,7 +12,7 @@ FONT_CANDIDATES = [
     Path.home() / ".fonts/DepartureMonoNerdFont-Regular.otf",
 ]
 
-SPRITE_COLORS = {"o": "line", "a": "amber", "h": "hot", "d": "dim", "k": "bg", "w": "hot", "t": "alert", "c": "dim", "p": "hot"}
+SPRITE_COLORS = {"o": "line", "a": "text", "h": "accent", "d": "dim", "k": "bg", "w": "accent", "t": "alert", "c": "dim", "p": "accent"}
 
 
 def font_path() -> str:
@@ -58,7 +58,7 @@ class BigFont:
     def width(self, text: str) -> int:
         return len(text) * self.advance
 
-    def draw(self, grid, x: int, y: int, text: str, fg: str = "amber") -> list[int]:
+    def draw(self, grid, x: int, y: int, text: str, fg: str = "text") -> list[int]:
         """Draw text; returns the indices of the cells it lit (handy for effects)."""
         lit = []
         for k, ch in enumerate(text):

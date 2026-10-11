@@ -1,30 +1,30 @@
-# AMBER CRT prompt
+# fresco prompt
 #   host ~/D/project [main] took 4s
 #   >
 add_newline = false
 format = "$hostname$directory$git_branch$git_status$cmd_duration$line_break$character"
-palette = "amber"
+palette = "fresco"
 
-[palettes.amber]
-amber = "#d6c3a5"
-hot   = "#c9a26b"
-dim   = "#866c52"
-alert = "#b8613d"
+[palettes.fresco]
+text   = "#d6c3a5"
+accent = "#c9a26b"
+dim    = "#866c52"
+alert  = "#b8613d"
 
 [hostname]
 ssh_only = false
 format = "[$hostname]($style) "
-style = "bold amber"
+style = "bold text"
 
 [directory]
 format = "[$path]($style)[$read_only]($read_only_style) "
-style = "hot"
+style = "accent"
 truncation_length = 3
 truncate_to_repo = true
 
 [git_branch]
 format = "[\\[$branch\\]]($style)"
-style = "amber"
+style = "text"
 
 [git_status]
 format = "[$all_status$ahead_behind]($style) "
@@ -36,5 +36,5 @@ format = "[took $duration]($style) "
 style = "dim"
 
 [character]
-success_symbol = "[>](bold amber)"
+success_symbol = "[>](bold text)"
 error_symbol = "[>](bold alert)"

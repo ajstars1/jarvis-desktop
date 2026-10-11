@@ -38,7 +38,7 @@ MOUSE = re.compile(r"\x1b\[<(\d+);(\d+);(\d+)([Mm])")
 DOTS = "·•∙"
 MATRIX = "01"
 # a trail dot ages through these colours, then disappears
-TRAIL_COLORS = ["hot", "dim", "line", "faint"]
+TRAIL_COLORS = ["accent", "dim", "line", "faint"]
 
 
 class Fade:

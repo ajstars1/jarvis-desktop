@@ -9,4 +9,4 @@ configuration {
     sort: true;
 }
 
-@theme "amber-crt"
+@theme "fresco"

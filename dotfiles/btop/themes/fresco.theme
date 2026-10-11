@@ -1,4 +1,4 @@
-# AMBER CRT for btop
+# fresco (dark) for btop: the fresco palette on a dark terminal
 theme[main_bg]="#1a130d"
 theme[main_fg]="#d6c3a5"
 theme[title]="#c9a26b"

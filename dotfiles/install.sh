@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AMBER CRT dotfiles installer.
+# sotto dotfiles installer.
 # Symlinks everything into ~/.config. Anything it would replace is moved to
 # ~/.dotfiles-backup/<timestamp>/ first, so every change can be undone.
 # Safe to run more than once.
@@ -34,41 +34,38 @@ link rofi                         .config/rofi
 link mako                         .config/mako
 link starship/starship.toml       .config/starship.toml
 link fastfetch                    .config/fastfetch
-link btop/themes/amber-crt.theme  .config/btop/themes/amber-crt.theme
-link kitty/amber-crt.conf         .config/kitty/amber-crt.conf
-link ghostty/themes/amber-crt     .config/ghostty/themes/amber-crt
-chmod +x "$DOT"/hypr/scripts/*.sh "$DOT"/hypr/wallpaper/make-wallpaper.py
+link btop/themes/fresco.theme     .config/btop/themes/fresco.theme
+link kitty/fresco.conf            .config/kitty/fresco.conf
+link ghostty/themes/fresco        .config/ghostty/themes/fresco
+chmod +x "$DOT"/hypr/scripts/*.sh "$DOT"/hypr/scripts/*.py
 
 # Terminal colour themes are left as they are: kitty keeps its Gruvbox theme.conf.
 
 echo "== btop theme =="
 BCONF="$HOME/.config/btop/btop.conf"
 if [ -f "$BCONF" ]; then
-    if ! grep -q '^color_theme = "amber-crt"' "$BCONF"; then
+    if ! grep -q '^color_theme = "fresco"' "$BCONF"; then
         backup .config/btop/btop.conf
-        sed -i 's|^color_theme = .*|color_theme = "amber-crt"|' "$BCONF"
+        sed -i 's|^color_theme = .*|color_theme = "fresco"|' "$BCONF"
     fi
 else
-    echo 'color_theme = "amber-crt"' > "$BCONF"
+    echo 'color_theme = "fresco"' > "$BCONF"
 fi
 
 echo "== zsh: prompt and tools (each line only runs if that tool is installed) =="
-if ! grep -q '>>> amber-crt >>>' "$HOME/.zshrc"; then
+if ! grep -q '>>> sotto >>>' "$HOME/.zshrc"; then
     backup .zshrc
     cat >> "$HOME/.zshrc" <<'EOF'
 
-# >>> amber-crt >>>
+# >>> sotto >>>
 command -v zoxide >/dev/null 2>&1 && eval "$(zoxide init zsh)"
-# <<< amber-crt <<<
+# <<< sotto <<<
 EOF
     echo "  added zoxide to ~/.zshrc"
 fi
 
-echo "== amber cursor (GTK apps read it from here, in both Hyprland and GNOME) =="
+echo "== cursor theme (GTK apps read it from here, in both Hyprland and GNOME) =="
 gsettings set org.gnome.desktop.interface cursor-theme 'Bibata-Modern-Amber' 2>/dev/null || true
-
-echo "== wallpaper, drawn from this machine's current specs =="
-python3 -I "$DOT/hypr/wallpaper/make-wallpaper.py" || echo "  skipped: python3-pil is missing"
 
 if command -v Hyprland >/dev/null 2>&1; then
     echo "== checking the Hyprland config =="

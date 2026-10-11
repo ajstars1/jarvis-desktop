@@ -8,8 +8,8 @@ PALETTE = {
     "surface": (0xE2, 0xD4, 0xBD),
     "line": (0xCD, 0xB9, 0x9B),
     "dim": (0x8F, 0x77, 0x59),
-    "amber": (0x3D, 0x2C, 0x1F),     # deep umber text (key kept for compatibility)
-    "hot": (0xA7, 0x78, 0x3F),       # ochre accent
+    "text": (0x3D, 0x2C, 0x1F),      # deep umber text
+    "accent": (0xA7, 0x78, 0x3F),    # ochre accent
     "alert": (0xA9, 0x53, 0x2F),     # terracotta
 }
 SGR_FG = {k: f"\x1b[38;2;{r};{g};{b}m" for k, (r, g, b) in PALETTE.items()}
@@ -25,7 +25,7 @@ class Grid:
         self.cols, self.rows = cols, rows
         n = cols * rows
         self.ch = [" "] * n
-        self.fg = ["amber"] * n
+        self.fg = ["text"] * n
         self.bg = [bg] * n
 
     def copy(self) -> "Grid":
@@ -43,7 +43,7 @@ class Grid:
             if bg:
                 self.bg[i] = bg
 
-    def text(self, x: int, y: int, s: str, fg: str = "amber", bg: str | None = None, width: int | None = None) -> int:
+    def text(self, x: int, y: int, s: str, fg: str = "text", bg: str | None = None, width: int | None = None) -> int:
         if width is not None and len(s) > width:
             s = s[: max(0, width - 1)] + "…"
         for k, c in enumerate(s):

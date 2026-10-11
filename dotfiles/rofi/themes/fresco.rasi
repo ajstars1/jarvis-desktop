@@ -1,15 +1,15 @@
-/* AMBER CRT launcher: text only, reverse-video selection, square edges */
+/* fresco: plain text menus (clipboard, keybind help); reverse-video selection */
 
 * {
     bg:      #ece2d0;
     surface: #e2d4bd;
     line:    #cdb99b;
     dim:     #8f7759;
-    amber:   #3d2c1f;
-    hot:     #a7783f;
+    text:    #3d2c1f;
+    accent:  #a7783f;
 
     background-color: transparent;
-    text-color: @amber;
+    text-color: @text;
     font: "DepartureMono Nerd Font 11px";
 }
 
@@ -19,7 +19,7 @@ window {
     anchor: center;
     background-color: @bg;
     border: 2px;
-    border-color: @amber;
+    border-color: @text;
     border-radius: 0;
     padding: 0;
 }
@@ -31,7 +31,7 @@ mainbox {
 
 inputbar {
     children: [ "prompt", "entry" ];
-    background-color: @amber;
+    background-color: @text;
     padding: 6px 10px;
     spacing: 8px;
 }
@@ -78,7 +78,7 @@ element-text {
 
 element selected.normal,
 element selected.active {
-    background-color: @amber;
+    background-color: @text;
     text-color: @bg;
 }
 

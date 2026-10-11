@@ -61,7 +61,7 @@ def build(state: dict, cols: int, rows: int, now: float | None = None,
     y += bf.height + 2
 
     line = say or f"{time.strftime('%A %d %B', lt)}  ·  {greeting(state.get('user', ''), lt.tm_hour)}"
-    g.text((cols - len(line)) // 2, y, line, "hot" if say else "dim")
+    g.text((cols - len(line)) // 2, y, line, "accent" if say else "dim")
     y += 4
 
     x0 = (cols - LIST_W) // 2
@@ -69,8 +69,8 @@ def build(state: dict, cols: int, rows: int, now: float | None = None,
         on = hover == n
         when = p["claude_ago"] or p["commit_ago"]
         detail = p["branch"] + (f" · {p['dirty']} changed" if p["dirty"] else "")
-        g.text(x0, y, "›" if on else " ", "hot")
-        g.text(x0 + 3, y, p["name"].title(), "hot" if on else "amber", width=30)
+        g.text(x0, y, "›" if on else " ", "accent")
+        g.text(x0 + 3, y, p["name"].title(), "accent" if on else "text", width=30)
         g.text(x0 + 36, y, detail, "dim", width=32)
         g.text(x0 + LIST_W - len(when), y, when, "dim")
         regions.append(Region(x0, y, x0 + LIST_W - 1, y, "project", n))
