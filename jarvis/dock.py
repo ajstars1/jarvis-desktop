@@ -381,7 +381,7 @@ class Dock(Gtk.Application):
         if launchable:
             item("New Window", lambda: self.launch(app_id))
         if wins:
-            item("Maximize", lambda: (focus_window(wins[0]), hypr("dispatch", "fullscreen", "1")))
+            item("Maximize / Restore", lambda: subprocess.Popen([os.path.expanduser("~/.config/hypr/scripts/window-max.sh"), wins[0]["address"]]))
         if launchable:
             if pinned:
                 item("Remove from Dock", lambda: self.set_pinned(app_id, False))
