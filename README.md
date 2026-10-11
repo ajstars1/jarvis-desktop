@@ -1,10 +1,22 @@
 # sotto
 
+A living, interactive terminal wallpaper for [Hyprland](https://hypr.land): a clock and your projects that react to the mouse, an AI prompt you open by double-clicking, and a real shell drawn inside the wallpaper, with a matching dock, app launcher, login screen and boot splash. Python, kitty and GTK4 on Ubuntu.
+
 *from* sotto voce, *Italian for "in a quiet voice", and* sotto, *"underneath": where a wallpaper lives.*
 
 **A wallpaper that's alive.** It knows what you're working on, it redraws itself from a JSON file, scripts can talk to it, and you can double-click it to ask anything.
 
 ![the living wallpaper](docs/wallpaper.gif)
+
+## A glimpse
+
+| | |
+|---|---|
+| **A shell inside the wallpaper.** Type `/terminal` and it's written straight onto the wallpaper. Drag it over the clock and it shakes it loose; when you're not typing in it, its text dissolves under the mouse like everything else. ![terminal inside the wallpaper](docs/terminal.gif) | **Login screen → desktop.** The login screen is the wallpaper's own home screen. Log in and it dissolves, and the wallpaper fades in around a clock that never moved. ![login screen](docs/login.gif) |
+| **Apps.** A floating list of every app, with when you last used each one and what it is. ![apps list](docs/apps.png) | **Search** ranks names first, then what an app is: "br" finds browsers. ![apps search](docs/apps-search.png) |
+| **Boot screen.** Parchment, the name in the clock's pixel font, a greeting, and the wallpaper's dot trail. ![boot screen](docs/boot.gif) | **Windows, dock and snapping.** Title bars, real minimize, drag-to-edge snapping and an auto-hiding dock. ![tour](docs/tour.gif) |
+
+The pictures are rendered from the real code with the demo data: `python demo/render.py` (the Apps list is a screenshot).
 
 The wallpaper is part of a calm, mouse-first [Hyprland](https://hypr.land) desktop. It also has a macOS-style dock and Windows-style window handling, in light colours taken from an old ceiling fresco.
 
