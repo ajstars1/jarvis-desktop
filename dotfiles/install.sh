@@ -64,6 +64,9 @@ EOF
     echo "  added zoxide to ~/.zshrc"
 fi
 
+echo "== Zen browser theme (if Zen is installed) =="
+"$DOT/zen/apply.sh"
+
 echo "== cursor theme (GTK apps read it from here, in both Hyprland and GNOME) =="
 gsettings set org.gnome.desktop.interface cursor-theme 'Bibata-Modern-Amber' 2>/dev/null || true
 

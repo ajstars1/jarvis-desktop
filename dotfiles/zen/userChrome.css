@@ -1,0 +1,115 @@
+/* sotto: Zen in the fresco palette, to match the desktop.
+   Parchment instead of Zen's gradient, umber text, an ochre accent, quiet borders.
+   Copied (not linked) into Zen's profile by install.sh: the Zen Flatpak can't see ~/dotfiles. */
+
+:root {
+    --sotto-bg: #ece2d0;
+    --sotto-paper: #f3ebde;
+    --sotto-surface: #e2d4bd;
+    --sotto-line: #cdb99b;
+    --sotto-dim: #8f7759;
+    --sotto-text: #3d2c1f;
+    --sotto-accent: #a7783f;
+
+    /* Zen's own colours */
+    --zen-primary-color: var(--sotto-accent) !important;
+    --zen-colors-primary: var(--sotto-surface) !important;
+    --zen-colors-secondary: var(--sotto-paper) !important;
+    --zen-colors-tertiary: var(--sotto-paper) !important;
+    --zen-colors-hover-bg: var(--sotto-surface) !important;
+    --zen-colors-primary-foreground: var(--sotto-text) !important;
+    --zen-colors-border: var(--sotto-line) !important;
+    --zen-colors-border-contrast: var(--sotto-line) !important;
+    --zen-colors-input-bg: var(--sotto-paper) !important;
+    --zen-dialog-background: var(--sotto-paper) !important;
+    --zen-urlbar-background: var(--sotto-paper) !important;
+    --zen-main-browser-background: var(--sotto-bg) !important;
+    --zen-main-browser-background-toolbar: var(--sotto-bg) !important;
+    --zen-themed-toolbar-bg: var(--sotto-bg) !important;
+    --zen-branding-bg: var(--sotto-bg) !important;
+
+    /* Firefox's, underneath */
+    --toolbar-bgcolor: var(--sotto-bg) !important;
+    --toolbar-color: var(--sotto-text) !important;
+    --toolbox-textcolor: var(--sotto-text) !important;
+    --lwt-text-color: var(--sotto-text) !important;
+    --toolbarbutton-icon-fill: var(--sotto-dim) !important;
+    --tab-selected-bgcolor: var(--sotto-paper) !important;
+    --tab-selected-textcolor: var(--sotto-text) !important;
+    --arrowpanel-background: var(--sotto-paper) !important;
+    --arrowpanel-color: var(--sotto-text) !important;
+    --arrowpanel-border-color: var(--sotto-line) !important;
+    --panel-separator-color: var(--sotto-line) !important;
+    --focus-outline-color: var(--sotto-accent) !important;
+    --toolbar-field-background-color: var(--sotto-paper) !important;
+    --toolbar-field-color: var(--sotto-text) !important;
+    --toolbar-field-focus-background-color: var(--sotto-paper) !important;
+    --toolbar-field-focus-border-color: var(--sotto-accent) !important;
+}
+
+/* the window itself: plain parchment, no gradient */
+#navigator-toolbox,
+#zen-main-app-wrapper,
+#browser,
+#zen-appcontent-wrapper {
+    background: var(--sotto-bg) !important;
+    color: var(--sotto-text) !important;
+}
+
+/* tabs in the sidebar: the open one sits on paper, like a row in the Apps list */
+.tabbrowser-tab .tab-background {
+    border-radius: 8px !important;
+}
+.tabbrowser-tab[selected] .tab-background,
+.tabbrowser-tab[multiselected] .tab-background {
+    background: var(--sotto-paper) !important;
+    box-shadow: 0 0 0 1px var(--sotto-line) !important;
+}
+.tabbrowser-tab:hover:not([selected]) .tab-background {
+    background: var(--sotto-surface) !important;
+}
+.tabbrowser-tab .tab-label {
+    color: var(--sotto-text) !important;
+}
+.tabbrowser-tab:not([selected]) .tab-label {
+    color: var(--sotto-dim) !important;
+}
+
+/* the address bar */
+#urlbar-background {
+    background: var(--sotto-paper) !important;
+    border: 1px solid var(--sotto-line) !important;
+}
+#urlbar[focused] #urlbar-background,
+#urlbar[open] #urlbar-background {
+    border-color: var(--sotto-accent) !important;
+}
+#urlbar-input::placeholder {
+    color: var(--sotto-dim) !important;
+}
+.urlbarView-row[selected] {
+    background: var(--sotto-surface) !important;
+}
+
+/* the page: a thin line instead of a shadow */
+.browserSidebarContainer {
+    box-shadow: 0 0 0 1px var(--sotto-line) !important;
+}
+
+/* menus and popups */
+menupopup,
+panel {
+    --panel-background: var(--sotto-paper) !important;
+    --panel-color: var(--sotto-text) !important;
+    --panel-border-color: var(--sotto-line) !important;
+}
+menuitem[_moz-menuactive],
+menu[_moz-menuactive] {
+    background: var(--sotto-surface) !important;
+    color: var(--sotto-text) !important;
+}
+
+::selection {
+    background: var(--sotto-accent) !important;
+    color: var(--sotto-paper) !important;
+}

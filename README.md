@@ -87,6 +87,7 @@ Try the brain from a terminal: `python -m sotto ask "open youtube"` (add `--do` 
   - An Apps button that opens the app list.
   - One icon per window: click to switch, click again to minimize, middle-click to close.
   - System status, and a **show desktop** button in the corner (also `Super+D`).
+- **Zen browser** in the same palette: parchment instead of Zen's gradient, umber text, an ochre accent, tabs on paper (`dotfiles/zen/`, copied into Zen's profile by `install.sh` or `dotfiles/zen/apply.sh`; restart Zen to see it).
 - **Login screen.** The wallpaper's own home screen: the same clock in the same place, the same greeting and dot trail, and a password line where your projects will be. Pick Hyprland or Ubuntu at the bottom (Tab or click); restart and shut down sit in the corner. When you log in it dissolves to bare parchment and the wallpaper fades in around a clock that never moved. It runs under [greetd](https://sr.ht/~kennylevinsen/greetd/) in kitty inside [cage](https://github.com/cage-kiosk/cage): `bin/sotto-greeter install`, then `preview` to try it in a window, then `enable` (`disable` brings back GDM). If it ever fails to start you get a plain text login instead.
 - **Boot screen.** Instead of the Ubuntu logo: parchment, "sotto" in the clock's pixel font, a greeting ("Welcome back", "See you soon" when shutting down), and the wallpaper's dot trail sweeping underneath. Install it with `bin/sotto-bootsplash` (uses sudo; `--undo` brings back Ubuntu's).
 

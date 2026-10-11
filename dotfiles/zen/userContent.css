@@ -1,0 +1,7 @@
+/* sotto: Zen's own pages (new tab, blank pages) on parchment. Websites keep their own look. */
+@-moz-document url("about:newtab"), url("about:home"), url("about:blank"), url("about:privatebrowsing") {
+    html, body {
+        background: #ece2d0 !important;
+        color: #3d2c1f !important;
+    }
+}
