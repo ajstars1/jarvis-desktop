@@ -30,7 +30,7 @@ CHEATSHEET = [HOME / ".config/hypr/cheatsheet.txt",                             
 SHOW_SHORTCUTS = {"type": "cmd", "argv": [str(HOME / ".config/hypr/scripts/cheatsheet.sh")]}
 WALL_SOCKET = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "sotto-wall.sock")
 SLASH = {   # /commands typed in the prompt
-    "terminal": "a terminal inside the wallpaper: drag its top bar to move it, the corner to resize",
+    "terminal": "a terminal inside the wallpaper: drag its label to move it, the bottom-right mark to resize",
     "help": "this list",
 }
 SLASH_ALIASES = {"term": "terminal", "t": "terminal", "shell": "terminal", "sh": "terminal", "?": "help"}
@@ -86,7 +86,7 @@ HOWTO = [
      "Click OFF at the top right, or press Super+Shift+E, for lock, log out, restart and shut down."),
     (r"screenshot|screen ?shot", "Press Print to pick an area or Shift+Print for the whole screen; it's copied and saved in Pictures/Screenshots. Or type screenshot here."),
     (r"terminal (in|inside|on) (the )?wallpaper|embedded terminal|/terminal",
-     "Type /terminal here: a shell opens inside the wallpaper. Drag its top bar to move it, the corner to resize, × to close."),
+     "Type /terminal here: a shell opens inside the wallpaper. Drag its label to move it, the bottom-right mark to resize it, × to close."),
     (r"wallpaper|this (box|prompt|thing)|what (is|are) you|who are you", "I'm the assistant on your wallpaper. Double-click anywhere on the wallpaper, type, and press Enter. Esc or a click elsewhere closes me."),
 ]
 

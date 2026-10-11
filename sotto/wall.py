@@ -2,7 +2,8 @@
 
 Always on screen: a quiet clock, one greeting line and your recent projects
 on light fresco parchment. Move the mouse over empty space and a faint trail
-of dots follows it and fades. Click a project to open it; right-click
+of dots follows it and fades, and whatever it touches (the clock, the date,
+the terminal's text) dissolves and re-forms. Click a project to open it; right-click
 anywhere for the desktop menu. `python -m sotto say "..."` shows a message
 in place of the greeting for a few seconds.
 
@@ -46,6 +47,8 @@ DOTS = "·•∙"
 MATRIX = "01"
 # a trail dot ages through these colours, then disappears
 TRAIL_COLORS = ["accent", "dim", "line", "faint"]
+SHADES = "░▒▓"                 # a touched clock pixel dissolves to these, then re-forms
+SCATTER = "·•∙01"              # a touched letter flickers through these, then settles
 
 
 class Fade:
@@ -87,6 +90,7 @@ class Wall:
         self.fade_src: Grid | None = None
         self.fade_t0 = 0.0
         self.trail: dict[int, tuple[str, float, float]] = {}   # cell -> (char, born, life)
+        self.scatter: dict[int, tuple[float, float, int]] = {}  # touched cell -> (born, life, seed)
         self.state = self.load_state()
         self.state_mtime = self.mtime(collect.STATE)
         self.inbox_mtime = self.mtime(collect.INBOX)
@@ -154,16 +158,57 @@ class Wall:
         return g
 
     def compose(self) -> Grid:
-        """base + live trail dots + the shell card on top."""
+        """The layers, back to front: the home screen, the mouse trail, the terminal's
+        text (the wallpaper fades just around it), and what the mouse disturbed."""
         g = self.base.copy()
         now = time.time()
+        if self.term:
+            self.term.recede(g)
         for i, (ch, born, life) in self.trail.items():
             k = min(len(TRAIL_COLORS) - 1, int((now - born) / life * len(TRAIL_COLORS)))
             if g.ch[i] == " ":
                 g.ch[i], g.fg[i] = ch, TRAIL_COLORS[k]
         if self.term:
             self.term.draw(g, self.term_focused)
+        self.apply_scatter(g, now)
         return g
+
+    def apply_scatter(self, g: Grid, now: float):
+        t = self.term if self.term_focused else None
+        for i, (born, life, seed) in self.scatter.items():
+            ch = g.ch[i]
+            if ch in (" ", ""):
+                continue
+            if t and t.has_ink(*reversed(divmod(i, self.cols))):
+                continue                             # never scramble what you're typing
+            p = (now - born) / life                  # 0 just touched .. 1 whole again
+            if ch in "█▀▄":
+                g.ch[i] = SHADES[min(2, int(p * 3))]     # light shade first, then denser, then solid
+            elif p < 0.65:
+                g.ch[i] = SCATTER[(seed + int(p * 9)) % len(SCATTER)]
+                g.fg[i] = "line" if seed % 3 else "accent"
+
+    def disturb(self, x: int, y: int, rx: int = 3, ry: int = 1):
+        """The mouse passing over the wallpaper's text and pixels shakes them loose."""
+        now = time.time()
+        t = self.term
+        for cy in range(y - ry, y + ry + 1):
+            for cx in range(x - rx, x + rx + 1):
+                if not (0 <= cx < self.cols and 0 <= cy < self.rows):
+                    continue
+                i = cy * self.cols + cx
+                if self.shown.ch[i] in (" ", "") or i in self.trail:
+                    continue
+                if any(r.hit(cx, cy) for r in self.regions):
+                    continue                         # project rows stay readable: they light up instead
+                if t and self.term_focused and (t.has_ink(cx, cy) or t.part(cx, cy) not in (None, "body")):
+                    continue                         # what you're typing stays still
+                if t and not self.term_focused and t.part(cx, cy) not in (None, "body"):
+                    continue                         # the label and the corner marks too
+                old = self.scatter.get(i)
+                if old and now - old[0] < old[1] * 0.5:
+                    continue
+                self.scatter[i] = (now, self.rng.uniform(0.45, 1.1), self.rng.randrange(1000))
 
     def present(self, frame: Grid, only=None):
         self.write(ansi_diff(self.shown, frame, only))
@@ -186,6 +231,7 @@ class Wall:
         if not self.visible:
             self.visible = True
             self.trail.clear()
+            self.scatter.clear()
             self.refresh_async()
         self.set_base(self.home(), animate=True)
 
@@ -224,11 +270,14 @@ class Wall:
             if t and t.hover_close != (part == "close"):
                 t.hover_close = part == "close"
                 self.term_dirty = True
-            if part:
-                return                               # over the card: no trail, no project hover
+            if part:                                 # the terminal shares the wallpaper's space:
+                self.drop_dots(x, y)                 # the trail runs through it, and it gets
+                self.disturb(x, y)                   # shaken like everything else
+                return
             hit = next((r for r in self.regions if r.hit(x, y)), None)
             if not hit:
                 self.drop_dots(x, y)
+                self.disturb(x, y)
             new = hit.index if hit else None
             if new != self.hover:
                 self.hover = new
@@ -357,7 +406,24 @@ class Wall:
             t.move_to(x - dx, y - dy, self.cols, self.rows)
         else:
             t.resize(x + dx - t.x - 1, y + dy - t.y - 1, self.cols, self.rows)
-        self.present(self.compose(), only=before | t.cells(self.cols, self.rows))
+        self.push_through(t)
+        self.present(self.compose(), only=before | t.cells(self.cols, self.rows) | set(self.scatter))
+
+    def push_through(self, t):
+        """Dragging the terminal shakes the wallpaper loose along its edges."""
+        now = time.time()
+        for cy in (t.y, t.y + t.height - 1):
+            for cx in range(t.x, t.x + t.width):
+                self._loosen(cx, cy, now)
+        for cx in (t.x, t.x + t.width - 1):
+            for cy in range(t.y, t.y + t.height):
+                self._loosen(cx, cy, now)
+
+    def _loosen(self, cx: int, cy: int, now: float):
+        if 0 <= cx < self.cols and 0 <= cy < self.rows:
+            i = cy * self.cols + cx
+            if self.base.ch[i] not in (" ", "") and i not in self.scatter:
+                self.scatter[i] = (now, self.rng.uniform(0.35, 0.8), self.rng.randrange(1000))
 
     def end_drag(self):
         self.drag = None
@@ -433,7 +499,7 @@ class Wall:
         if "resize" in self.flags:
             self.flags.discard("resize")
             self.cols, self.rows = self.size()
-            self.fade, self.trail = None, {}
+            self.fade, self.trail, self.scatter = None, {}, {}
             self.base = self.home() if self.visible else Grid(self.cols, self.rows)
             self.shown = Grid(self.cols, self.rows)
             self.write("\x1b[48;2;236;226;208m\x1b[2J")
@@ -469,19 +535,23 @@ class Wall:
             frame = self.shown.copy()
             self.fade.apply(t, frame, self.fade_src)
             only = set(self.fade.plan.keys())
-            if self.term:
-                self.term.draw(frame, self.term_focused)     # the card stays on top
+            if self.term:                                    # the terminal stays on top
+                self.term.recede(frame)
+                self.term.draw(frame, self.term_focused)
                 only |= self.term.cells(self.cols, self.rows)
             self.present(frame, only=only)
             if t >= self.fade.end:
                 self.fade = None
             return
 
-        if self.trail:
+        if self.trail or self.scatter:
             dead = [i for i, (_, born, life) in self.trail.items() if now - born >= life]
             for i in dead:
                 del self.trail[i]
-            self.present(self.compose(), only=set(self.trail) | set(dead))
+            settled = [i for i, (born, life, _) in self.scatter.items() if now - born >= life]
+            for i in settled:
+                del self.scatter[i]
+            self.present(self.compose(), only=set(self.trail) | set(dead) | set(self.scatter) | set(settled))
 
         if now >= self.next_refresh:
             self.next_refresh = now + REFRESH_EVERY
@@ -495,7 +565,7 @@ class Wall:
                 self.set_base(self.home(), animate=False)
 
     def timeout(self) -> float:
-        return 1 / FPS if (self.fade or self.trail or self.term_dirty or self.drag) else 1.0
+        return 1 / FPS if (self.fade or self.trail or self.scatter or self.term_dirty or self.drag) else 1.0
 
     def run(self, fd: int):
         # any-motion mouse tracking stays on: motion only arrives when the pointer is over the bare desktop

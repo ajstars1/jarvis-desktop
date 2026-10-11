@@ -653,9 +653,12 @@ class Dock(Gtk.Application):
         self.prompt_anim = GLib.timeout_add(14, tick)
 
     # ── the terminal inside the wallpaper ─────────────────────────────────
-    # The wallpaper takes the keyboard while you use its terminal. Hyprland then
-    # won't move focus on a click elsewhere, so this invisible layer covers
-    # everything except the terminal card: a click on it gives the keyboard back.
+    # The wallpaper takes the keyboard while you use its terminal. Clicking the
+    # wallpaper gives it back (the wallpaper sees that click itself), but Hyprland
+    # won't move the keyboard when you click back into the window you came from.
+    # So this invisible layer lies over your windows only: a click on one gives
+    # the keyboard back and hands it to that window. The wallpaper stays uncovered,
+    # so its mouse trail and effects keep working everywhere.
     def make_term_catcher(self):
         self.term_catcher = None
         if not LS or cairo is None:
@@ -689,14 +692,13 @@ class Dock(Gtk.Application):
             return
         self.term_on_at = GLib.get_monotonic_time()
         try:
-            region = cairo.Region(cairo.RectangleInt(0, 0, 10000, 10000))
-            region.subtract(cairo.RectangleInt(x, y - top, w, h))   # the card itself stays clickable...
+            region = cairo.Region()
             ws = json.loads(hypr("activeworkspace", "-j") or "{}").get("id")
-            for c in clients():                                       # ...except where a window covers it
+            for c in clients():                  # each window, with room for its title bar and border
                 if c["workspace"]["id"] == ws:
                     (cx, cy), (cw, chh) = c["at"], c["size"]
-                    region.union(cairo.RectangleInt(cx, cy - top, cw, chh))
-            surf.set_input_region(region)
+                    region.union(cairo.RectangleInt(cx - 4, cy - top - 30, cw + 8, chh + 34))
+            surf.set_input_region(region)        # no windows: nothing to catch
         except Exception:
             pass
 

@@ -26,7 +26,7 @@ It isn't an image or a video. It's **a small program drawing on the desktop itse
   ```
 
   The message takes the greeting's place for a few seconds. It's useful for long builds, test runs, deploys and reminders.
-- **It costs nothing when idle.** If nothing changes, it draws nothing: 0 bytes to the screen and no CPU. It takes about 115 MB of RAM including the terminal it runs in. Moving the mouse over empty space leaves a faint trail of dots that fades out.
+- **It costs nothing when idle.** If nothing changes, it draws nothing: 0 bytes to the screen and no CPU. It takes about 115 MB of RAM including the terminal it runs in. Moving the mouse leaves a faint trail of dots that fades out, and whatever it touches comes loose for a moment: the clock's pixels dissolve into shades (░▒▓) and re-form, letters flicker into dots and settle.
 
 ## Ask your wallpaper
 
@@ -59,9 +59,12 @@ It behaves like a popup:
 
 ### A terminal inside the wallpaper
 
-Type `/terminal` in the prompt and your shell opens as a card drawn into the wallpaper itself, in its font and colours. It stays under your windows like the rest of the wallpaper.
-- Drag its top bar to move it, the corner to resize it, × (or `exit`) to close it. The wheel scrolls back through its history.
-- Click it to type in it. A click anywhere else, Alt+Tab or a top-bar click gives the keyboard back to your windows, and the window you clicked gets it straight away.
+Type `/terminal` in the prompt and your shell opens right there, written straight onto the wallpaper: no window, just four corner marks and a label, in the wallpaper's font and colours. It shares the wallpaper's space:
+- the clock and your projects stay visible behind it; the wallpaper fades only right around its text, and phrases it overlaps fade whole
+- the mouse trail runs through it, and dragging it shakes the wallpaper loose along its edges
+- when you're not typing in it, its text dissolves under the mouse like everything else and turns grey; click it and it sharpens, with ochre corners
+
+Drag the label to move it, the bottom-right mark to resize it, × (or `exit`) to close it. The wheel scrolls back through its history. Click it to type in it; a click on the wallpaper or on a window, Alt+Tab or a top-bar click gives the keyboard back, and a window you click gets it straight away.
 - Shift+drag selects text, Ctrl+Shift+C and Ctrl+Shift+V copy and paste.
 
 The wallpaper is itself a terminal (kitty), so this is a terminal inside a terminal: [`sotto/term.py`](sotto/term.py) runs your shell in a pty, [pyte](https://github.com/selectel/pyte) keeps its screen, and the wall draws it. To take the keyboard, the wallpaper asks its own kitty through remote control, on a socket in `$XDG_RUNTIME_DIR` that only you can reach. kitty's own shortcuts are turned off in the wallpaper, so Ctrl+Shift+W can't close it.

@@ -1,9 +1,10 @@
 """A shell inside the wallpaper: type /terminal in the wallpaper prompt.
 
 The wallpaper is itself a terminal (kitty), so this runs your shell in a pty,
-lets pyte keep its screen, and the wall draws that screen as a card in its own
-font and colours. Drag the top bar to move the card and the corner to resize
-it; × closes it (or type `exit`).
+lets pyte keep its screen, and the wall writes that screen straight onto the
+wallpaper, in its own font and colours, between four corner marks. Drag the
+label to move it and the bottom-right mark to resize it; × closes it (or type
+`exit`).
 """
 import fcntl
 import os
@@ -15,7 +16,8 @@ import termios
 
 import pyte
 
-PAPER = "#f3ebde"          # the card, a shade lighter than the wallpaper
+# what wallpaper colours fade to right around the shell's text (fading twice changes nothing)
+GHOST = {"text": "line", "dim": "line", "accent": "line", "alert": "line"}
 # ANSI colours for a light background (white stays readable, black is the light one)
 ANSI = {
     "black": "#e2d4bd", "red": "#a9532f", "green": "#6f7d3c", "brown": "#a7783f",
@@ -150,35 +152,86 @@ class Term:
         t = (self.screen.title or "").strip()
         return t or os.path.basename(self.shell)
 
-    # ── drawing ─────────────────────────────────────────────────────────
+    # ── drawing: ink on the wallpaper, not a window ──────────────────────
+    # No box: four corner marks and a label. The shell's text is written straight
+    # onto the wallpaper. Right around each letter the wallpaper fades to a pale
+    # print so the text reads; everywhere else (the clock behind, your projects,
+    # the mouse trail) stays as it is. Asleep (not focused) the text fades to grey.
+    def recede(self, g):
+        """Wallpaper words the terminal overlaps fade as whole phrases (never cut in
+        half at its edge), so they can't run into the shell's text. The clock's
+        pixels stay solid: they only fade right around the text (see draw)."""
+        X, w, cols = self.x, self.width, g.cols
+        for y in range(max(0, self.y), min(g.rows, self.y + self.height)):
+            row, x = y * cols, 0
+            while x < cols:
+                if g.ch[row + x] in (" ", "") or g.ch[row + x] in "█▀▄":
+                    x += 1
+                    continue
+                start = end = x
+                gap = 0
+                while x < cols and g.ch[row + x] not in "█▀▄":
+                    if g.ch[row + x] in (" ", ""):
+                        gap += 1
+                        if gap >= 2:           # two spaces end a phrase
+                            break
+                    else:
+                        gap, end = 0, x
+                    x += 1
+                if end >= X and start < X + w:
+                    for i in range(row + start, row + end + 1):
+                        g.fg[i] = GHOST.get(g.fg[i], g.fg[i])
+                x = max(x, end + 1)
+
+    def has_ink(self, x: int, y: int) -> bool:
+        """Is there shell text at this wallpaper cell?"""
+        c, r = x - self.x - 1, y - self.y - 1
+        if not (0 <= c < self.cols and 0 <= r < self.rows):
+            return False
+        return self.screen.buffer[r][c].data not in (" ", "")
+
     def draw(self, g, focused: bool):
-        X, Y, w = self.x, self.y, self.width
-        g.fill(X, Y, w, 1, " ", "dim", "surface")
-        g.text(X + 2, Y, self.title(), "text" if focused else "dim", "surface", width=w - 7)
-        g.set(X + w - 3, Y, "×", "alert" if self.hover_close else "dim", "surface")
-        g.fill(X, Y + 1, w, self.height - 1, " ", "text", PAPER)
-        g.set(X + w - 1, Y + self.height - 1, "┘", "line", PAPER)       # resize grip
+        X, Y, w, h = self.x, self.y, self.width, self.height
+        cols, rows = g.cols, g.rows
+        ink: dict[int, tuple[str, str, str]] = {}          # cell -> (char, fg, bg)
+
+        def put(x, y, ch, fg, bg="bg"):
+            if 0 <= x < cols and 0 <= y < rows:
+                ink[y * cols + x] = (ch, fg, bg)
+
+        mark = "accent" if focused else "line"
+        for cx, cy, ch in ((X, Y, "┌"), (X + w - 1, Y, "┐"), (X, Y + h - 1, "└"), (X + w - 1, Y + h - 1, "┘")):
+            put(cx, cy, ch, mark)                            # the bottom-right one is the resize grip
+        title = self.title()[: max(0, w - 7)]
+        for k, ch in enumerate(title):
+            put(X + 2 + k, Y, ch, "text" if focused else "dim")
+        put(X + w - 3, Y, "×", "alert" if self.hover_close else ("dim" if focused else "line"))
+
         scr = self.screen
         cur = scr.cursor
-        show_cursor = not cur.hidden and scr.history.position >= scr.history.size
-        cols = g.cols
+        show_cursor = focused and not cur.hidden and scr.history.position >= scr.history.size
+        default_fg = "text" if focused else "dim"
         for r in range(self.rows):
             line = scr.buffer[r]
-            gy = Y + 1 + r
-            if not 0 <= gy < g.rows:
-                continue
             for c in range(self.cols):
-                gx = X + 1 + c
-                if not 0 <= gx < cols:
-                    continue
                 cell = line[c]
                 ch = cell.data                 # "" is the right half of a wide character
+                is_cursor = show_cursor and r == cur.y and c == cur.x
+                if ch == " " and cell.bg == "default" and not cell.reverse and not is_cursor:
+                    continue                   # empty: the wallpaper shows through
                 if ch and (ord(ch[0]) < 32 or ord(ch[0]) == 127):
                     ch = " "                   # never pass control characters to the outer terminal
-                fg, bg = color(cell.fg, "text"), color(cell.bg, PAPER)
+                fg, bg = color(cell.fg, default_fg), color(cell.bg, "bg")
                 if cell.reverse:
                     fg, bg = bg, fg
-                if show_cursor and r == cur.y and c == cur.x:
-                    fg, bg = (PAPER, "text") if focused else (fg, "line")
-                i = gy * cols + gx
-                g.ch[i], g.fg[i], g.bg[i] = ch, fg, bg
+                if is_cursor:
+                    fg, bg = "bg", "text"
+                put(X + 1 + c, Y + 1 + r, ch, fg, bg)
+
+        for i in ink:                          # a pale halo around the text...
+            y, x = divmod(i, cols)
+            for j in (i - cols - 1, i - cols, i - cols + 1, i - 1, i + 1, i + cols - 1, i + cols, i + cols + 1):
+                if 0 <= j < len(g.ch) and j not in ink and abs(j % cols - x) <= 1:
+                    g.fg[j] = GHOST.get(g.fg[j], g.fg[j])
+        for i, (ch, fg, bg) in ink.items():    # ...then the text itself
+            g.ch[i], g.fg[i], g.bg[i] = ch, fg, bg
