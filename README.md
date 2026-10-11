@@ -87,6 +87,7 @@ Try the brain from a terminal: `python -m sotto ask "open youtube"` (add `--do` 
   - An Apps button that opens the app list.
   - One icon per window: click to switch, click again to minimize, middle-click to close.
   - System status, and a **show desktop** button in the corner (also `Super+D`).
+- **Login screen.** The wallpaper's own home screen: the same clock in the same place, the same greeting and dot trail, and a password line where your projects will be. Pick Hyprland or Ubuntu at the bottom (Tab or click); restart and shut down sit in the corner. When you log in it dissolves to bare parchment and the wallpaper fades in around a clock that never moved. It runs under [greetd](https://sr.ht/~kennylevinsen/greetd/) in kitty inside [cage](https://github.com/cage-kiosk/cage): `bin/sotto-greeter install`, then `preview` to try it in a window, then `enable` (`disable` brings back GDM). If it ever fails to start you get a plain text login instead.
 - **Boot screen.** Instead of the Ubuntu logo: parchment, "sotto" in the clock's pixel font, a greeting ("Welcome back", "See you soon" when shutting down), and the wallpaper's dot trail sweeping underneath. Install it with `bin/sotto-bootsplash` (uses sudo; `--undo` brings back Ubuntu's).
 
 ## Install
@@ -129,6 +130,7 @@ open = ["kitty --directory {path}", "kitty --directory {path} -e npm run dev"]
 | [`sotto/assistant.py`](sotto/assistant.py) | the prompt's brain: local intents first, Claude only for real questions, a whitelist of safe actions |
 | [`sotto/dock.py`](sotto/dock.py) | GTK4 + gtk4-layer-shell: the dock, the Apps list, the wallpaper prompt, and the snap preview outline. It notes which app has focus, so the Apps list knows when you last used each one (`~/.cache/sotto/app-usage.json`; before that it uses GNOME's record). |
 | [`sotto/term.py`](sotto/term.py) | the terminal inside the wallpaper: your shell in a pty, its screen kept by pyte and drawn by the wall as a card |
+| [`sotto/greeter.py`](sotto/greeter.py) | the login screen: the wallpaper's effects (it reuses `Wall`) with a password line, talking to greetd over its socket |
 | [`sotto/bootsplash.py`](sotto/bootsplash.py) | draws the boot screen as a Plymouth script theme. Plymouth starts before your fonts are available, so all the text is drawn into PNGs. |
 | [`dotfiles/hypr/scripts/`](dotfiles/hypr/scripts/) | the desktop behaviour Hyprland doesn't have: snapping (`snap.py` notices a drag by a window moving exactly with the cursor), minimize, maximize, show desktop, top-bar clicks |
 

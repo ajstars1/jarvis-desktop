@@ -6,6 +6,7 @@
   python -m sotto preview out.png  render one frame to a PNG
   python -m sotto ask "open youtube" [--do]   what the wallpaper assistant would do
   python -m sotto bootsplash DIR [--preview out.png]   render the boot screen theme into DIR
+  python -m sotto greet [--demo]   the login screen (under greetd; --demo: password "sotto")
 """
 import json
 import sys
@@ -48,6 +49,10 @@ def main(argv: list[str]) -> int:
             if do:
                 assistant.run_action(r["action"])
         return 0
+    if cmd == "greet":
+        from . import greeter
+
+        return greeter.run(argv[1:])
     if cmd == "bootsplash":
         from pathlib import Path
 

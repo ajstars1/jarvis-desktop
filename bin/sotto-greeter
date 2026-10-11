@@ -1,0 +1,96 @@
+#!/bin/sh
+# The sotto login screen: the wallpaper's home screen, with a password line.
+# It runs under greetd, in kitty, inside the cage kiosk compositor. Uses sudo.
+#
+#   sotto-greeter install   install greetd + cage and the login screen (GDM stays the login manager)
+#   sotto-greeter preview   try it in a window first (demo: the password is "sotto")
+#   sotto-greeter enable    make it the login screen from the next boot
+#   sotto-greeter disable   back to GDM, Ubuntu's login screen, from the next boot
+#
+# If the login screen ever fails to start, a plain text login appears instead,
+# and Ctrl+Alt+F3 always gives you a text console to run `sotto-greeter disable`.
+set -e
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+LIB=/usr/local/lib/sotto-greeter
+CACHE=/var/cache/sotto-greeter
+DM_LINK=/etc/systemd/system/display-manager.service
+FONT="$HOME/.local/share/fonts/DepartureMonoNerdFont-Regular.otf"
+
+name() {    # the name the wallpaper greets you with
+    sed -n 's/^name *= *"\(.*\)".*/\1/p' "$HOME/.config/sotto/config.toml" 2>/dev/null | head -1
+}
+
+case "${1:-}" in
+install)
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y greetd cage python3-pil
+    # installing greetd makes it the login manager for the next boot; keep GDM until `enable`
+    [ "$(readlink -f "$DM_LINK")" = /usr/lib/systemd/system/greetd.service ] && \
+        [ "$(cat /etc/X11/default-display-manager 2>/dev/null)" != /usr/sbin/greetd ] && \
+        sudo ln -sf /usr/lib/systemd/system/gdm3.service "$DM_LINK"
+
+    sudo install -d -m 755 "$LIB/sotto" /usr/local/share/fonts/sotto
+    sudo install -m 644 "$REPO"/sotto/*.py "$LIB/sotto/"
+    sudo install -m 644 "$FONT" /usr/local/share/fonts/sotto/
+    sudo fc-cache -f /usr/local/share/fonts/sotto >/dev/null
+    sudo install -d -m 750 -o _greetd -g _greetd "$CACHE"
+
+    who="$(name)"
+    printf '{"user": "%s", "name": "%s", "sessions": ["hyprland", "ubuntu"]}\n' "$USER" "${who:-$USER}" \
+        | sudo tee /etc/sotto-greeter.json >/dev/null
+
+    sudo tee "$LIB/run-greeter" >/dev/null <<'EOF'
+#!/bin/sh
+# greetd runs this as the login screen. If the sotto greeter can't start,
+# a plain text login appears instead, so you can always log in.
+export HOME=/var/cache/sotto-greeter SOTTO_GREETER_CACHE=/var/cache/sotto-greeter
+export XDG_CONFIG_HOME=/var/cache/sotto-greeter/config XDG_CACHE_HOME=/var/cache/sotto-greeter/cache
+export PYTHONPATH=/usr/local/lib/sotto-greeter XCURSOR_THEME=Bibata-Modern-Amber XCURSOR_SIZE=24
+rm -f "$XDG_RUNTIME_DIR/sotto-greeter-ok"
+cage -s -- kitty --config=NONE -o linux_display_server=wayland \
+    -o 'font_family=DepartureMono Nerd Font' -o font_size=8.25 \
+    -o background=#ece2d0 -o foreground=#3d2c1f -o background_opacity=1 \
+    -o window_padding_width=0 -o cursor_trail=0 -o mouse_hide_wait=0 \
+    -o clear_all_shortcuts=yes -o confirm_os_window_close=0 \
+    /usr/bin/python3 -m sotto greet
+[ -e "$XDG_RUNTIME_DIR/sotto-greeter-ok" ] && exit 0
+exec /usr/sbin/agreety --cmd /usr/bin/start-hyprland
+EOF
+    sudo chmod 755 "$LIB/run-greeter"
+
+    [ -f /etc/greetd/config.toml.orig ] || sudo cp /etc/greetd/config.toml /etc/greetd/config.toml.orig
+    sudo tee /etc/greetd/config.toml >/dev/null <<EOF
+# The sotto login screen (see sotto-greeter). The original is config.toml.orig.
+[terminal]
+vt = 7
+
+[default_session]
+command = "$LIB/run-greeter"
+user = "_greetd"
+EOF
+    echo "Installed. Try it with: $0 preview    Then: $0 enable"
+    ;;
+preview)
+    command -v cage >/dev/null || { echo "Run '$0 install' first."; exit 1; }
+    PYTHONPATH="$LIB" SOTTO_GREETER_CACHE="$(mktemp -d)" cage -- kitty --config=NONE \
+        -o 'font_family=DepartureMono Nerd Font' -o font_size=8.25 \
+        -o background=#ece2d0 -o foreground=#3d2c1f -o window_padding_width=0 -o mouse_hide_wait=0 \
+        /usr/bin/python3 -m sotto greet --demo
+    ;;
+enable)
+    [ -x "$LIB/run-greeter" ] || { echo "Run '$0 install' first."; exit 1; }
+    sudo ln -sf /usr/lib/systemd/system/greetd.service "$DM_LINK"
+    echo /usr/sbin/greetd | sudo tee /etc/X11/default-display-manager >/dev/null
+    sudo systemctl daemon-reload
+    echo "Done: the sotto login screen appears from the next boot. To go back: $0 disable"
+    ;;
+disable)
+    sudo ln -sf /usr/lib/systemd/system/gdm3.service "$DM_LINK"
+    echo /usr/sbin/gdm3 | sudo tee /etc/X11/default-display-manager >/dev/null
+    sudo systemctl daemon-reload
+    echo "Done: Ubuntu's login screen (GDM) is back from the next boot."
+    ;;
+*)
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    exit 1
+    ;;
+esac
