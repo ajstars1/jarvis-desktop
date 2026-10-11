@@ -96,16 +96,65 @@
     box-shadow: 0 0 0 1px var(--sotto-line) !important;
 }
 
-/* menus and popups */
+/* menus and popups: light, with dark text. Zen otherwise keeps its dark-theme
+   (white) text on them when the system theme is dark. */
+:root,
 menupopup,
 panel {
+    color-scheme: light !important;
     --panel-background: var(--sotto-paper) !important;
     --panel-color: var(--sotto-text) !important;
     --panel-border-color: var(--sotto-line) !important;
+    --panel-description-color: var(--sotto-dim) !important;
+    --panel-item-hover-bgcolor: var(--sotto-surface) !important;
+    --panel-item-active-bgcolor: var(--sotto-line) !important;
+    --menu-background-color: var(--sotto-paper) !important;
+    --menu-color: var(--sotto-text) !important;
+    --menu-border-color: var(--sotto-line) !important;
+    --menuitem-hover-background-color: var(--sotto-surface) !important;
+    --menu-disabled-color: var(--sotto-dim) !important;
+    --button-text-color: var(--sotto-text) !important;
+    --button-background-color: var(--sotto-surface) !important;
+    --button-background-color-hover: var(--sotto-line) !important;
 }
+panel,
+panelview,
+.panel-subview-body,
+.panel-header,
+.subviewbutton,
+toolbarbutton.subviewbutton,
+.toolbaritem-combined-buttons,
+menupopup,
+menuitem,
+menu,
+menu > .menu-text,
+menuitem > .menu-text,
+.menu-accel,
+.menu-iconic-accel,
+#appMenu-popup label,
+#appMenu-popup description,
+panel label,
+panel description {
+    color: var(--sotto-text) !important;
+}
+panel description,
+.menu-accel,
+.menu-iconic-accel,
+menuitem[disabled],
+.subviewbutton[disabled] {
+    color: var(--sotto-dim) !important;
+}
+.subviewbutton:hover,
+.subviewbutton[open],
 menuitem[_moz-menuactive],
 menu[_moz-menuactive] {
     background: var(--sotto-surface) !important;
+    color: var(--sotto-text) !important;
+}
+.subviewbutton image,
+.subviewbutton .toolbarbutton-icon,
+panel toolbarbutton {
+    fill: var(--sotto-dim) !important;
     color: var(--sotto-text) !important;
 }
 

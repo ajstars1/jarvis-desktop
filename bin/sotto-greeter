@@ -80,12 +80,23 @@ enable)
     [ -x "$LIB/run-greeter" ] || { echo "Run '$0 install' first."; exit 1; }
     sudo ln -sf /usr/lib/systemd/system/greetd.service "$DM_LINK"
     echo /usr/sbin/greetd | sudo tee /etc/X11/default-display-manager >/dev/null
+    # GDM keeps the boot screen up until it draws; greetd doesn't, so the console's
+    # boot messages would show in between. Keep the boot screen on the screen until
+    # the login screen replaces it, and keep the console quiet.
+    sudo install -d /etc/systemd/system/plymouth-quit.service.d
+    printf '[Service]\nExecStart=\nExecStart=-/usr/bin/plymouth quit --retain-splash\n' \
+        | sudo tee /etc/systemd/system/plymouth-quit.service.d/sotto-retain-splash.conf >/dev/null
+    echo 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT loglevel=3 rd.udev.log_level=3 systemd.show_status=false vt.global_cursor_default=0"' \
+        | sudo tee /etc/default/grub.d/91-sotto-quiet-boot.cfg >/dev/null
+    sudo update-grub 2>/dev/null
     sudo systemctl daemon-reload
     echo "Done: the sotto login screen appears from the next boot. To go back: $0 disable"
     ;;
 disable)
     sudo ln -sf /usr/lib/systemd/system/gdm3.service "$DM_LINK"
     echo /usr/sbin/gdm3 | sudo tee /etc/X11/default-display-manager >/dev/null
+    sudo rm -f /etc/systemd/system/plymouth-quit.service.d/sotto-retain-splash.conf /etc/default/grub.d/91-sotto-quiet-boot.cfg
+    sudo update-grub 2>/dev/null
     sudo systemctl daemon-reload
     echo "Done: Ubuntu's login screen (GDM) is back from the next boot."
     ;;
