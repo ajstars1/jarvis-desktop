@@ -1,0 +1,17 @@
+{
+ "version": 1,
+ "user": "FRIEND",
+ "headline": ["GOOD MORNING,", "FRIEND."],
+ "mood": "happy",
+ "system": {"ram": 41, "swap": 3, "disk": 52, "temp": 44, "uptime": "2h10m", "pressure": 0.0},
+ "projects": [
+  {"name": "JARVIS-DESKTOP", "path": "/tmp", "display_path": "~/Developer/jarvis-desktop", "branch": "main", "dirty": 2, "commit": "feat: wallpaper assistant", "commit_ago": "12m ago", "claude_ago": "just now", "open": []},
+  {"name": "PORTFOLIO-SITE", "path": "/tmp", "display_path": "~/Developer/portfolio-site", "branch": "main", "dirty": 0, "commit": "fix: dark mode toggle", "commit_ago": "3h ago", "claude_ago": "2h ago", "open": []},
+  {"name": "IOT-COLLAR", "path": "/tmp", "display_path": "~/Developer/iot-collar", "branch": "feat/firmware", "dirty": 1, "commit": "feat: heart-rate filter", "commit_ago": "1d ago", "claude_ago": "1d ago", "open": []},
+  {"name": "BLENDER-SCENES", "path": "/tmp", "display_path": "~/Developer/blender-scenes", "branch": "main", "dirty": 0, "commit": "chore: render presets", "commit_ago": "2d ago", "claude_ago": "", "open": []},
+  {"name": "ML-NOTEBOOKS", "path": "/tmp", "display_path": "~/Developer/ml-notebooks", "branch": "main", "dirty": 0, "commit": "docs: training notes", "commit_ago": "4d ago", "claude_ago": "", "open": []},
+  {"name": "DOTFILES", "path": "/tmp", "display_path": "~/dotfiles", "branch": "main", "dirty": 0, "commit": "feat: fresco palette", "commit_ago": "5d ago", "claude_ago": "", "open": []}
+ ],
+ "messages": [],
+ "tokens": []
+}

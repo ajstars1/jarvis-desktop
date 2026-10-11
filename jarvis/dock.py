@@ -30,6 +30,12 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
 
 try:
+    gi.require_foreign("cairo")       # needs python3-gi-cairo; without it, clicks after an answer close the prompt
+    import cairo  # noqa: E402
+except ImportError:
+    cairo = None
+
+try:
     gi.require_version("GioUnix", "2.0")
     from gi.repository import GioUnix  # noqa: E402
     DesktopAppInfo = GioUnix.DesktopAppInfo
@@ -288,6 +294,21 @@ class Dock(Gtk.Application):
         if msg and msg[0] == "prompt-close":
             self.close_prompt()
             return False
+        if msg and msg[0] == "prompt-demo" and len(msg) >= 4:   # for demo recordings: type it out, then Enter
+            self.open_prompt(int(msg[1]), int(msg[2]))
+            text, typed = " ".join(msg[3:]), [0]
+
+            def key():
+                typed[0] += 1
+                self.prompt_entry.set_text(text[:typed[0]])
+                self.prompt_entry.set_position(-1)
+                if typed[0] >= len(text):
+                    GLib.timeout_add(350, lambda: self.on_prompt_submit(self.prompt_entry) or False)
+                    return False
+                return True
+
+            GLib.timeout_add(70, key)
+            return False
         if msg and msg[0] == "prompt-ask":          # for testing: submit text as if typed
             self.open_prompt(400, 300)
             self.prompt_entry.set_text(" ".join(msg[1:]))
@@ -301,12 +322,11 @@ class Dock(Gtk.Application):
             self.preview_box.set_size_request(max(1, w - 2 * inset), max(1, h - 2 * inset))
             self.preview.set_visible(True)
             surf = self.preview.get_surface()
-            if surf is not None and not getattr(self, "preview_passthrough", False):
+            if surf is not None and cairo is not None and not getattr(self, "preview_passthrough", False):
                 try:
-                    import cairo
                     surf.set_input_region(cairo.Region())   # never catches the mouse
                     self.preview_passthrough = True
-                except (ImportError, TypeError):
+                except Exception:
                     pass
         else:
             self.preview.set_visible(False)
@@ -379,18 +399,17 @@ class Dock(Gtk.Application):
     def set_prompt_input(self, box_only: bool):
         """Where the prompt layer accepts clicks: everywhere (while typing) or just the box."""
         surf = self.prompt.get_surface()
-        if surf is None:
+        if surf is None or cairo is None:
             return
         try:
-            import cairo
-        except ImportError:
-            return
-        if box_only:
-            a = self.prompt_box.get_allocation()
-            region = cairo.Region(cairo.RectangleInt(a.x, a.y, max(1, a.width), max(1, a.height) + 220))
-        else:
-            region = cairo.Region(cairo.RectangleInt(0, 0, 10000, 10000))
-        surf.set_input_region(region)
+            if box_only:
+                a = self.prompt_box.get_allocation()
+                region = cairo.Region(cairo.RectangleInt(a.x, a.y, max(1, a.width), max(1, a.height) + 220))
+            else:
+                region = cairo.Region(cairo.RectangleInt(0, 0, 10000, 10000))
+            surf.set_input_region(region)
+        except Exception:               # never let this break the prompt
+            pass
 
     def open_prompt(self, x: int, y: int):
         if not self.prompt:

@@ -119,8 +119,8 @@ class Wall:
             self.out.flush()
 
     def refresh_async(self):
-        if self.collecting:
-            return
+        if self.collecting or os.environ.get("JARVIS_DEMO"):
+            return                            # demo mode: show the given state.json as is
         self.collecting = True
 
         def work():

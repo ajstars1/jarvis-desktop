@@ -1,0 +1,40 @@
+# AMBER CRT prompt
+#   host ~/D/project [main] took 4s
+#   >
+add_newline = false
+format = "$hostname$directory$git_branch$git_status$cmd_duration$line_break$character"
+palette = "amber"
+
+[palettes.amber]
+amber = "#d6c3a5"
+hot   = "#c9a26b"
+dim   = "#866c52"
+alert = "#b8613d"
+
+[hostname]
+ssh_only = false
+format = "[$hostname]($style) "
+style = "bold amber"
+
+[directory]
+format = "[$path]($style)[$read_only]($read_only_style) "
+style = "hot"
+truncation_length = 3
+truncate_to_repo = true
+
+[git_branch]
+format = "[\\[$branch\\]]($style)"
+style = "amber"
+
+[git_status]
+format = "[$all_status$ahead_behind]($style) "
+style = "alert"
+
+[cmd_duration]
+min_time = 2000
+format = "[took $duration]($style) "
+style = "dim"
+
+[character]
+success_symbol = "[>](bold amber)"
+error_symbol = "[>](bold alert)"

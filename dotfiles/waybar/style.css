@@ -1,0 +1,198 @@
+/* AMBER CRT: a thin, tmux-style status line.
+   DepartureMono is perfectly sharp only at 11px, so everything stays at 11px. */
+
+* {
+    font-family: "DepartureMono Nerd Font", monospace;
+    font-size: 11px;
+    border: none;
+    border-radius: 0;
+    min-height: 0;
+    box-shadow: none;
+    text-shadow: none;
+}
+
+window#waybar {
+    background: #ece2d0;
+    color: #3d2c1f;
+}
+
+tooltip {
+    background: #ece2d0;
+    border: 1px solid #3d2c1f;
+}
+
+tooltip label {
+    color: #3d2c1f;
+}
+
+#workspaces button {
+    padding: 0 6px;
+    color: #8f7759;
+    background: transparent;
+}
+
+#workspaces button:hover {
+    background: #e2d4bd;
+    color: #3d2c1f;
+}
+
+/* active workspace: a quiet ochre underline, nothing louder */
+#workspaces button.active {
+    color: #3d2c1f;
+    box-shadow: inset 0 -2px #a7783f;
+}
+
+#workspaces button.urgent {
+    color: #a9532f;
+}
+
+#window {
+    color: #8f7759;
+}
+
+#cpu,
+#memory,
+#temperature,
+#network,
+#pulseaudio,
+#custom-crt,
+#tray,
+#clock,
+#custom-power {
+    padding: 0 10px;
+    color: #8f7759;
+}
+
+#memory.warning,
+#temperature.critical {
+    color: #a7783f;
+}
+
+/* RAM above 90%: blink, so you notice before the system starts closing apps */
+#memory.critical {
+    background: #a9532f;
+    color: #ece2d0;
+    animation-name: blink;
+    animation-duration: 1s;
+    animation-timing-function: steps(2);
+    animation-iteration-count: infinite;
+}
+
+@keyframes blink {
+    to {
+        background: #ece2d0;
+        color: #a9532f;
+    }
+}
+
+#network.disconnected {
+    color: #a9532f;
+}
+
+#pulseaudio.muted {
+    color: #8f7759;
+}
+
+#custom-crt {
+    color: #8f7759;
+}
+
+#clock {
+    color: #3d2c1f;
+}
+
+#custom-power {
+    color: #8f7759;
+}
+
+#custom-power:hover {
+    color: #a9532f;
+}
+
+/* ── dock ─────────────────────────────────────────────────────────── */
+window#waybar.dock {
+    background: transparent;
+}
+
+/* the bar itself is invisible; only the centred icon group gets the pill */
+window#waybar.dock .modules-center {
+    background: #f3ebde;
+    border: 1px solid #cdb99b;
+    border-radius: 18px;
+    padding: 0 10px;
+}
+
+window#waybar.dock #image {
+    padding: 0 6px;
+}
+
+window#waybar.dock #custom-divider {
+    color: #cdb99b;
+    padding: 0 4px;
+}
+
+window#waybar.dock #taskbar button {
+    padding: 0 6px;
+    border-radius: 10px;
+}
+
+window#waybar.dock #taskbar button:hover {
+    background: #e2d4bd;
+}
+
+/* a quiet ochre dot-line under the window you're in */
+window#waybar.dock #taskbar button.active {
+    box-shadow: inset 0 -2px #a7783f;
+}
+
+/* ── top bar: Apps button + open apps (click to switch) ────────────── */
+#custom-apps {
+    padding: 0 12px 0 10px;
+    color: #3d2c1f;
+    font-size: 14px;
+}
+
+#custom-apps:hover {
+    color: #a7783f;
+}
+
+#taskbar button {
+    padding: 0 7px;
+    border-radius: 6px;
+    background: transparent;
+}
+
+#taskbar button:hover {
+    background: #e2d4bd;
+}
+
+/* the app you're in gets a soft panel and an ochre line */
+#taskbar button.active {
+    background: #e2d4bd;
+    box-shadow: inset 0 -2px #a7783f;
+}
+
+#taskbar button.minimized {
+    opacity: 0.45;
+}
+
+/* top bar: windows grouped per workspace; minimized ones live in the special group */
+#workspaces button {
+    padding: 0 4px;
+}
+
+#workspaces button.special {
+    opacity: 0.45;
+}
+
+
+/* show desktop: the last thing on the right, like Windows */
+#custom-desktop {
+    padding: 0 12px 0 10px;
+    color: #8f7759;
+    font-size: 14px;
+}
+
+#custom-desktop:hover {
+    color: #a7783f;
+}

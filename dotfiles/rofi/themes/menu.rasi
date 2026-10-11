@@ -1,0 +1,25 @@
+/* Small light menu: right-click on the desktop, power menu. */
+* {
+    bg:    #ece2d0;
+    panel: #e2d4bd;
+    line:  #cdb99b;
+    dim:   #8f7759;
+    text:  #3d2c1f;
+    background-color: transparent;
+    text-color: @text;
+    font: "DepartureMono Nerd Font 11px";
+}
+window {
+    width: 260px;
+    location: center;
+    background-color: @bg;
+    border: 1px;
+    border-color: @line;
+    border-radius: 12px;
+    padding: 8px;
+}
+mainbox { children: [ "listview" ]; }
+listview { lines: 12; fixed-height: false; scrollbar: false; spacing: 2px; }
+element { padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+element selected.normal { background-color: @panel; }
+element-text { text-color: inherit; background-color: transparent; }

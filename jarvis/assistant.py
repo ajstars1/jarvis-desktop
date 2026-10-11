@@ -47,7 +47,7 @@ SITES = {
 FOLDERS = {
     "home": "~", "home folder": "~", "downloads": "~/Downloads", "documents": "~/Documents",
     "pictures": "~/Pictures", "photos": "~/Pictures", "videos": "~/Videos", "music": "~/Music",
-    "desktop": "~/Desktop", "developer": "~/Developer", "projects": "~/Developer/Ayush",
+    "desktop": "~/Desktop", "developer": "~/Developer", "projects": "~/Developer",
     "screenshots": "~/Pictures/Screenshots", "wallpapers": "~/Pictures/Wallpapers",
 }
 ALIASES = {  # everyday words -> what to open
@@ -78,7 +78,7 @@ HOWTO = [
 ]
 
 SYSTEM_PROMPT = (
-    "You are the assistant built into the wallpaper of Ayush's computer: Ubuntu 26.04 with the Hyprland "
+    "You are the assistant built into the wallpaper of this computer: Ubuntu with the Hyprland "
     "desktop, a dock at the bottom, an app switcher in the top bar, title bars with × + – buttons, "
     "drag-to-edge snapping and a right-click desktop menu. Reply in plain text with no markdown, at most "
     "three short sentences, friendly and direct. If the user wants something done on the computer, end with "

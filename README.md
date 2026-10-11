@@ -1,61 +1,105 @@
-# jarvis: the AJSTARS living wallpaper
+# jarvis-desktop
 
-At rest the desktop is a plain fresco-umber screen with nothing on it. Move the mouse over the empty desktop and a faint trail of matrix dots follows it and fades. SUPER+H brings up the home screen: a quiet clock, one greeting line and your recent projects as a clickable list. It fades in from dots and leaves the same way.
+A calm, mouse-first desktop for [Hyprland](https://hypr.land): a wallpaper you can talk to, a macOS-style dock, and Windows-style window handling, in light colours taken from an old ceiling fresco.
 
-Everything runs locally: no network, no API keys, and nothing drawn while idle (about 22 MB of RAM).
+![demo](docs/demo.gif)
 
-## Use
+## What you get
 
-| Action | Does |
+- **A living wallpaper.** A quiet clock, a greeting and your recent projects (ranked from your Claude Code sessions, your own commits and uncommitted work). Click a project to open it. Moving the mouse over empty space leaves a faint trail of dots. When nothing changes, nothing is redrawn.
+- **An assistant in the wallpaper.** Double-click anywhere on it and type. Small things happen instantly and locally:
+  - open apps, sites, folders and projects
+  - YouTube and web searches
+  - system info: RAM, disk, temperature, IP
+  - lock, screenshot, volume
+  - how-to questions about this desktop
+
+  Real questions go to Claude Haiku through your Claude Code login (optional). The answer types itself out underneath.
+- **A dock.** It hides until the mouse touches the bottom edge, then slides up. Pinned apps sit in it, and a dot marks the running ones (no duplicate icons). Right-click an icon for its windows, New Window, Maximize / Restore, Keep in Dock / Remove, Quit, and Dock Settings, where you choose, order and size the apps.
+- **Window handling like Windows and macOS.**
+  - Title bars with × + – buttons that act on the window you click.
+  - Click to focus and raise. Real minimize and restore.
+  - Maximize that keeps windows normal, so others can still come in front.
+  - Alt+Tab.
+  - Drag-to-edge snapping (halves, quarters, maximize), with an outline preview. Drag a snapped window away and it gets its old size back.
+  - Show desktop.
+- **A top bar that switches apps.**
+  - An Apps button for a Launchpad-style grid.
+  - One icon per window: click to switch, click again to minimize, middle-click to close.
+  - System status, and a show-desktop button in the corner.
+
+## Requirements
+
+Tested on Ubuntu 26.04 with Hyprland 0.53, on a single 1366×768 screen and a 2016 Intel desktop with 8 GB of RAM. The idle cost is a few tens of MB.
+
+## Install
+
+```sh
+git clone https://github.com/ajstars1/jarvis-desktop ~/Developer/jarvis-desktop
+cd ~/Developer/jarvis-desktop
+sudo apt install $(cat dotfiles/packages.txt)
+uv sync --managed-python --python 3.12          # the wallpaper's Python env; immune to OS Python upgrades
+./dotfiles/install.sh                           # links configs into ~/.config, backing up what it replaces
+```
+
+Set `$jarvis` near the top of `dotfiles/hypr/hyprland.conf` to where you cloned the repo. Then log out, pick **Hyprland** on the login screen, and log in.
+
+Optional: put your name in `~/.config/jarvis/config.toml` (`name = "Sam"`) for the greeting. To use the wallpaper assistant for real questions, install and log in to [Claude Code](https://claude.com/claude-code). Everything else works without it.
+
+## Using it
+
+| | |
 |---|---|
-| move the mouse over the desktop | a dot trail follows it and fades |
-| `SUPER+H` | home screen in / out |
-| right-click, click empty space, `Esc`, 30 s idle | home screen leaves |
-| click a project (or `1`–`6`) | open it on an empty workspace |
-| `python -m jarvis say "Build done"` | show a message on the home screen for 8 s |
+| double-click the wallpaper | ask or command; Enter to send, Esc or a click elsewhere to close |
+| mouse to the bottom edge | dock |
+| drag a title bar to an edge or corner | snap; drag away to restore |
+| top bar icons | switch, minimize, close (middle-click) |
+| right-click the desktop | Apps, Show desktop, Files, Terminal, Tile / Float windows, Dock settings, Lock, Log out… |
+| `Super+Space` | all apps |
+| `Super+D` | show desktop |
+| `Alt+Tab` | switch windows |
+| `Super+F1` | every shortcut |
 
-## Wallpaper assistant
+## Configuration
 
-**Double-click anywhere on the empty wallpaper**, type, and press Enter. Esc while typing, or a click elsewhere on the wallpaper, closes it. Click the answer to ask again.
+- `~/.config/jarvis/config.toml`
+  - `name`: the greeting
+  - `hide`: projects to leave off the wallpaper
+  - `[[pin]]`: projects that always show, each with its own `open` commands
+- `~/.config/jarvis/dock.json`: the dock's apps, icon size and auto-hide. It's easiest to change through Dock Settings.
+- `dotfiles/`: the Hyprland side. Palette, keybinds, title bars, Waybar, rofi, mako and hyprlock.
 
-- **Done locally, instantly, free:**
-  - open apps, sites, folders and projects: "open blender", "open youtube", "open downloads", "open vitalpaw"
-  - search: "play lofi on youtube", "search best laptops"
-  - system info: "how much ram", "what time is it", "cpu temp", "ip"
-  - "lock", "screenshot", "volume up"
-  - how-to questions about this desktop: "how do I snap windows?"
-- **Anything else** goes to Claude (Haiku, through the Claude Code login) and comes back as a couple of sentences. Claude can only ask for the same safe actions (open a URL, open an app, search); it never runs commands. It uses `--tools ""`, no MCP servers and no saved session.
+```toml
+# ~/.config/jarvis/config.toml
+name = "Sam"
+hide = ["~/Developer/some-fork"]
 
-The brain is `jarvis/assistant.py`. The prompt is drawn by the dock (`jarvis/dock.py`), and the wallpaper detects the double-click. Try the brain from a terminal: `.venv/bin/python -m jarvis ask "open youtube"` (add `--do` to really do it).
+[[pin]]
+path = "~/Developer/my-app"
+label = "MY-APP"
+open = ["kitty --directory {path}", "kitty --directory {path} -e npm run dev"]
+```
 
 ## How it works
 
-- `jarvis/collect.py` writes `~/.cache/jarvis/state.json`. It ranks projects by your Claude Code sessions, commits *you* authored, and uncommitted edits, and adds RAM, disk and temperature. It rewrites the file only when something changed.
-- `jarvis/wall.py` runs inside `kitty +kitten panel --edge=background` (see `bin/jarvis-wall`). It watches `state.json` and re-assembles only the cells that changed.
-- `jarvis/scene.py` handles layout, `jarvis/art.py` the pixel font and BYTE, and `jarvis/grid.py` the cell grid that renders to ANSI (live) or PNG (preview).
+| Part | What it does |
+|---|---|
+| `jarvis/collect.py` | writes `~/.cache/jarvis/state.json` (projects, system info), only when something changed |
+| `jarvis/wall.py` | the wallpaper: a terminal program on Hyprland's background layer (`kitty +kitten panel --edge=background`), drawn cell by cell |
+| `jarvis/dock.py` | GTK4 + gtk4-layer-shell: the dock, the snap preview outline and the wallpaper prompt |
+| `jarvis/assistant.py` | the prompt's brain: local intents first, Claude only for real questions, a whitelist of safe actions |
+| `dotfiles/hypr/scripts/snap.py` | snapping. Hyprland reports no title-bar drags, so it watches for a window that moves exactly with the cursor |
+| `dotfiles/hypr/scripts/` | minimize/maximize/show-desktop/taskbar helpers that add the desktop behaviour Hyprland doesn't have |
 
-## Commands
+Preview frames without a screen: `.venv/bin/python -m jarvis preview out.png`. Try the assistant: `.venv/bin/python -m jarvis ask "open youtube"` (add `--do` to really do it). `demo/state.json` holds the sample data used for the GIF; run the wallpaper with `JARVIS_DEMO=1 JARVIS_STATE=demo/state.json` to show it.
 
-```sh
-.venv/bin/python -m jarvis collect          # refresh state.json
-.venv/bin/python -m jarvis preview out.png  # render one frame
-.venv/bin/python -m jarvis dump             # print the state
-```
+## Known limits
 
-## Config: `~/.config/jarvis/config.toml` (optional)
+- One monitor so far.
+- Snapping happens when the drag **pauses** at an edge, because Hyprland doesn't report the mouse release during title-bar drags.
+- Hyprland has no built-in minimize, so minimized windows live on a hidden workspace.
+- Without `python3-gi-cairo`, the first click after an answer closes the wallpaper prompt instead of passing through.
 
-```toml
-name = "Ayush"
-hide = ["~/Developer/Ayush/scrcpy"]
+## License
 
-[[pin]]                                   # always shown first
-path = "~/Developer/Ayush/VitalPaw/vitalpaw"
-label = "VITALPAW"
-open = ["kitty --directory {path}", "kitty --directory {path}/studio -e npm run dev"]
-```
-
-## Setup
-
-```sh
-uv sync --managed-python --python 3.12   # managed Python, so OS upgrades can't break the venv
-```
+MIT

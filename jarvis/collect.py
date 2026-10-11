@@ -7,6 +7,7 @@ been working), git (branch, uncommitted files, last commit) and /proc + /sys
 state.json is rewritten only when its content changes, so the wallpaper
 animates only when there is something new to show.
 """
+import getpass
 import json
 import os
 import random
@@ -19,7 +20,7 @@ from pathlib import Path
 
 HOME = Path.home()
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "jarvis"
-STATE = CACHE / "state.json"
+STATE = Path(os.environ["JARVIS_STATE"]) if os.environ.get("JARVIS_STATE") else CACHE / "state.json"
 INBOX = CACHE / "say.json"
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "jarvis" / "config.toml"
 CLAUDE_PROJECTS = HOME / ".claude" / "projects"
@@ -281,7 +282,7 @@ def collect():
     cfg = config()
     now = int(time.time())
     hour = time.localtime(now).tm_hour
-    name = str(cfg.get("name", os.environ.get("JARVIS_NAME", "Ayush"))).upper()
+    name = str(cfg.get("name") or os.environ.get("JARVIS_NAME") or getpass.getuser()).upper()
     hidden = {Path(os.path.expanduser(h)).resolve() for h in cfg.get("hide", [])}
     pins = {Path(os.path.expanduser(p["path"])).resolve(): p for p in cfg.get("pin", [])}
 

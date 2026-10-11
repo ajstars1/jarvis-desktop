@@ -1,0 +1,133 @@
+[
+  {
+    "layer": "top",
+    "position": "top",
+    "height": 26,
+    "spacing": 0,
+    "modules-left": [
+      "custom/apps",
+      "hyprland/workspaces"
+    ],
+    "modules-center": [
+      "hyprland/window"
+    ],
+    "modules-right": [
+      "cpu",
+      "memory",
+      "temperature",
+      "network",
+      "pulseaudio",
+      "tray",
+      "clock",
+      "custom/power",
+      "custom/desktop"
+    ],
+    "hyprland/window": {
+      "format": "{title}",
+      "max-length": 60,
+      "separate-outputs": true,
+      "rewrite": {
+        "(.*) — Mozilla Firefox": "$1",
+        "(.*) - Google Chrome": "$1",
+        "(.*) - Brave": "$1"
+      }
+    },
+    "cpu": {
+      "interval": 3,
+      "format": "CPU {usage:>2}%",
+      "tooltip": false
+    },
+    "memory": {
+      "interval": 5,
+      "format": "RAM {percentage:>2}%",
+      "tooltip-format": "{used:0.1f}G used of {total:0.1f}G\nswap {swapUsed:0.1f}G of {swapTotal:0.1f}G",
+      "states": {
+        "warning": 75,
+        "critical": 90
+      }
+    },
+    "temperature": {
+      "hwmon-path-abs": "/sys/devices/platform/coretemp.0/hwmon",
+      "input-filename": "temp1_input",
+      "critical-threshold": 80,
+      "interval": 5,
+      "format": "{temperatureC}°C",
+      "tooltip": false
+    },
+    "network": {
+      "interval": 10,
+      "format-ethernet": "ETH",
+      "format-wifi": "WIFI {signalStrength}%",
+      "format-linked": "NO IP",
+      "format-disconnected": "OFFLINE",
+      "tooltip-format": "{ifname} {ipaddr}",
+      "on-click": "kitty -e nmtui"
+    },
+    "pulseaudio": {
+      "format": "VOL {volume}%",
+      "format-muted": "MUTE",
+      "scroll-step": 5,
+      "on-click": "pavucontrol",
+      "tooltip": false
+    },
+    "custom/crt": {
+      "exec": "~/.config/hypr/scripts/crt-mode.sh status",
+      "interval": "once",
+      "signal": 8,
+      "on-click": "~/.config/hypr/scripts/crt-mode.sh next",
+      "tooltip": false
+    },
+    "tray": {
+      "icon-size": 14,
+      "spacing": 6
+    },
+    "clock": {
+      "interval": 30,
+      "format": "{:%a %d %b %H:%M}",
+      "tooltip-format": "<tt>{calendar}</tt>",
+      "calendar": {
+        "mode": "month",
+        "format": {
+          "months": "<span color='#a7783f'><b>{}</b></span>",
+          "weekdays": "<span color='#8f7759'>{}</span>",
+          "today": "<span background='#3d2c1f' color='#ece2d0'><b>{}</b></span>"
+        }
+      }
+    },
+    "custom/power": {
+      "format": "OFF",
+      "tooltip": false,
+      "on-click": "~/.config/hypr/scripts/power-menu.sh"
+    },
+    "name": "top",
+    "custom/apps": {
+      "format": "󰀻",
+      "tooltip-format": "All apps",
+      "on-click": "hyprctl dispatch exec 'rofi -show drun -theme drawer'",
+      "on-click-right": "~/.config/hypr/scripts/desktop-menu.sh"
+    },
+    "hyprland/workspaces": {
+      "format": "{windows}",
+      "format-icons": {
+        "default": ""
+      },
+      "show-special": true,
+      "workspace-taskbar": {
+        "enable": true,
+        "update-active-window": true,
+        "format": "{icon}",
+        "icon-size": 16,
+        "on-click-window": "~/.config/hypr/scripts/taskbar-click.sh {address} {button}",
+        "icon-theme": [
+          "Yaru",
+          "hicolor"
+        ]
+      }
+    },
+    "custom/desktop": {
+      "format": "󰍹",
+      "tooltip-format": "Show desktop",
+      "on-click": "~/.config/hypr/scripts/show-desktop.sh"
+    }
+  }
+]

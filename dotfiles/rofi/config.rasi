@@ -1,0 +1,12 @@
+configuration {
+    modi: "drun,run,window";
+    show-icons: false;
+    display-drun: "RUN>";
+    display-run: "CMD>";
+    display-window: "WIN>";
+    drun-display-format: "{name}";
+    matching: "fuzzy";
+    sort: true;
+}
+
+@theme "amber-crt"

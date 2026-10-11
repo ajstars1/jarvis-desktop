@@ -1,0 +1,28 @@
+# AMBER CRT notifications: square, no icons, terminal-style text
+font=DepartureMono Nerd Font 11px
+background-color=#ece2d0
+text-color=#3d2c1f
+border-color=#3d2c1f
+border-size=2
+border-radius=0
+padding=8,12
+margin=8
+width=340
+max-visible=4
+icons=0
+anchor=top-right
+default-timeout=5000
+format=<b>&gt; %s</b>\n%b
+progress-color=over #cdb99b
+
+[urgency=low]
+text-color=#8f7759
+border-color=#cdb99b
+
+[urgency=critical]
+text-color=#a9532f
+border-color=#a9532f
+default-timeout=0
+
+[mode=do-not-disturb]
+invisible=1

@@ -3,3 +3,5 @@ __pycache__/
 voices/
 *.pyc
 preview*.png
+# generated on install (contains your machine specs and name)
+dotfiles/hypr/wallpaper/*.png
