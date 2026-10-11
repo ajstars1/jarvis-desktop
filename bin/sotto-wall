@@ -1,8 +1,16 @@
 #!/bin/sh
 # Starts the living wallpaper on Hyprland's background layer.
 # DepartureMono at 8.25pt = 11px, its only pixel-sharp size -> a 195x54 grid on 1366x768.
+# Remote control (on a socket only you can reach) lets the wallpaper take the keyboard
+# while you use the terminal inside it. kitty's own shortcuts are off, so keys like
+# Ctrl+Shift+W can't close the wallpaper; only copy and paste are kept.
 cd "$(dirname "$0")/.." || exit 1
-exec kitty +kitten panel --edge=background --class=sotto-wall \
+SOCK="${XDG_RUNTIME_DIR:-/tmp}/sotto-wall-kitty.sock"
+rm -f "$SOCK"
+exec kitty +kitten panel --edge=background --class=sotto-wall --listen-on="unix:$SOCK" \
+    -o allow_remote_control=socket-only \
+    -o clear_all_shortcuts=yes \
+    -o 'map=ctrl+shift+c copy_to_clipboard' -o 'map=ctrl+shift+v paste_from_clipboard' \
     -o background=#ece2d0 -o foreground=#3d2c1f \
     -o 'font_family=DepartureMono Nerd Font' -o font_size=8.25 \
     -o background_opacity=1 -o window_padding_width=0 -o cursor_trail=0 -o mouse_hide_wait=0 \

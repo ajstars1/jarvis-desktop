@@ -5,6 +5,10 @@ on light fresco parchment. Move the mouse over empty space and a faint trail
 of dots follows it and fades. Click a project to open it; right-click
 anywhere for the desktop menu. `python -m sotto say "..."` shows a message
 in place of the greeting for a few seconds.
+
+/terminal in the wallpaper prompt opens a shell inside the wallpaper itself
+(sotto/term.py). While you use it the wallpaper holds the keyboard, through
+kitty's remote control; a click anywhere else gives it back.
 """
 import json
 import os
@@ -31,10 +35,13 @@ from .scene import build
 FPS = 30
 REFRESH_EVERY = 300            # re-read projects/system this often (seconds)
 SAY_SECONDS = 8                # a `say` message stays this long
-PIDFILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "sotto-wall.pid")
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+PIDFILE = os.path.join(RUNTIME, "sotto-wall.pid")
+SOCKET = os.path.join(RUNTIME, "sotto-wall.sock")        # commands for the wall (from the dock)
 LOG = collect.CACHE / "wall.log"
 
 MOUSE = re.compile(r"\x1b\[<(\d+);(\d+);(\d+)([Mm])")
+HALF_MOUSE = re.compile(r"\x1b\[<[\d;]*$")            # a mouse report cut in two by a read
 DOTS = "·•∙"
 MATRIX = "01"
 # a trail dot ages through these colours, then disappears
@@ -93,6 +100,13 @@ class Wall:
         self.last_cell = (-1, -1)
         self.last_click = None
         self.next_refresh = 0.0
+        self.term = None                           # the shell card, when open
+        self.term_focused = False
+        self.term_dirty = False
+        self.term_drawn = 0.0
+        self.drag = None                           # ("move" | "size", dx, dy) while dragging the card
+        self.outer_modes = (False, False)          # cursor-key and paste modes mirrored to kitty
+        self.sock = None
 
     # ── plumbing ──────────────────────────────────────────────────────────
     @staticmethod
@@ -140,13 +154,15 @@ class Wall:
         return g
 
     def compose(self) -> Grid:
-        """base + live trail dots."""
+        """base + live trail dots + the shell card on top."""
         g = self.base.copy()
         now = time.time()
         for i, (ch, born, life) in self.trail.items():
             k = min(len(TRAIL_COLORS) - 1, int((now - born) / life * len(TRAIL_COLORS)))
             if g.ch[i] == " ":
                 g.ch[i], g.fg[i] = ch, TRAIL_COLORS[k]
+        if self.term:
+            self.term.draw(g, self.term_focused)
         return g
 
     def present(self, frame: Grid, only=None):
@@ -191,9 +207,25 @@ class Wall:
                 self.trail[cy * self.cols + cx] = (ch, now, self.rng.uniform(0.5, 1.1))
 
     def on_mouse(self, b: int, x: int, y: int, press: bool):
-        if b & 64:                                   # wheel
+        t = self.term
+        part = t.part(x, y) if t else None
+        if self.drag:
+            if b & 32:                               # still holding the button: follow the mouse
+                self.drag_to(x, y)
+            elif not press:
+                self.end_drag()
+            return
+        if b & 64:                                   # wheel: scroll the shell's history
+            if part == "body" and press:
+                t.scroll(up=not b & 1)
+                self.term_dirty = True
             return
         if b & 32:                                   # motion
+            if t and t.hover_close != (part == "close"):
+                t.hover_close = part == "close"
+                self.term_dirty = True
+            if part:
+                return                               # over the card: no trail, no project hover
             hit = next((r for r in self.regions if r.hit(x, y)), None)
             if not hit:
                 self.drop_dots(x, y)
@@ -204,6 +236,19 @@ class Wall:
             return
         if not press:
             return
+        if part:
+            if (b & 3) == 0:
+                if part == "close":
+                    self.close_term()
+                    return
+                self.focus_term(True)
+                if part == "title":
+                    self.drag = ("move", x - t.x, y - t.y)
+                elif part == "corner":
+                    self.drag = ("size", t.x + t.width - 1 - x, t.y + t.height - 1 - y)
+            return
+        if self.term_focused:
+            self.focus_term(False)                   # a click on the wallpaper gives the keyboard back
         if (b & 3) == 2:                             # right click: desktop menu
             subprocess.Popen([os.path.expanduser("~/.config/hypr/scripts/desktop-menu.sh")],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
@@ -232,12 +277,117 @@ class Wall:
             pass
         return 7, 14
 
+    # ── the shell card ────────────────────────────────────────────────────
+    def open_term(self, px: int | None = None, py: int | None = None):
+        if self.term:
+            self.focus_term(True)
+            return
+        try:
+            from .term import Term
+        except ImportError:                          # pyte isn't installed
+            self.show("The terminal needs pyte: run uv sync in the sotto folder")
+            return
+        t = Term(0, 0)
+        if px is None or py is None:
+            x, y = (self.cols - t.width) // 2, (self.rows - t.height) // 2
+        else:
+            cw, chh = self.cell_px()
+            x, y = px // cw, py // chh
+        t.move_to(x, y, self.cols, self.rows)
+        self.term = t
+        self.focus_term(True)
+        self.present(self.compose(), only=t.cells(self.cols, self.rows))
+
+    def close_term(self):
+        t = self.term
+        if not t:
+            return
+        cells = t.cells(self.cols, self.rows)
+        self.focus_term(False)
+        self.term, self.drag = None, None
+        t.close()
+        self.present(self.compose(), only=cells)
+
+    def focus_term(self, on: bool):
+        on = bool(on and self.term)
+        if on == self.term_focused:
+            return
+        self.term_focused = on
+        self.kitty_focus("exclusive" if on else "not-allowed")
+        self.tell_dock(self.term_rect() if on else "term-off")
+        self.sync_modes()
+        self.term_dirty = True
+
+    def term_rect(self) -> str:
+        """The card in screen pixels, for the dock (it catches clicks everywhere else)."""
+        cw, chh = self.cell_px()
+        t = self.term
+        return f"term-on {t.x * cw} {t.y * chh} {t.width * cw} {t.height * chh}"
+
+    def kitty_focus(self, policy: str):
+        """Let the wallpaper's kitty take the keyboard (or give it back)."""
+        to = os.environ.get("KITTY_LISTEN_ON")
+        if not to:
+            return
+        try:
+            subprocess.Popen(["kitten", "@", "--to", to, "resize-os-window", "--self", "--action=os-panel",
+                              "--incremental", f"focus-policy={policy}"],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError:
+            log_error()
+
+    def sync_modes(self):
+        """Mirror the shell's cursor-key and bracketed-paste modes to kitty, so kitty
+        sends exactly the keys the program inside expects."""
+        from .term import DECCKM, PASTE
+        mode = self.term.screen.mode if self.term and self.term_focused else set()
+        want = (DECCKM in mode, PASTE in mode)
+        if want != self.outer_modes:
+            self.write(("\x1b[?1h" if want[0] else "\x1b[?1l") + ("\x1b[?2004h" if want[1] else "\x1b[?2004l"))
+            self.outer_modes = want
+
+    def drag_to(self, x: int, y: int):
+        t = self.term
+        if not t:
+            self.drag = None
+            return
+        kind, dx, dy = self.drag
+        before = t.cells(self.cols, self.rows)
+        if kind == "move":
+            t.move_to(x - dx, y - dy, self.cols, self.rows)
+        else:
+            t.resize(x + dx - t.x - 1, y + dy - t.y - 1, self.cols, self.rows)
+        self.present(self.compose(), only=before | t.cells(self.cols, self.rows))
+
+    def end_drag(self):
+        self.drag = None
+        if self.term_focused:
+            self.tell_dock(self.term_rect())
+
+    def on_command(self, msg: list[str]):
+        if msg and msg[0] == "term":
+            if len(msg) == 3 and msg[1].isdigit() and msg[2].isdigit():
+                self.open_term(int(msg[1]), int(msg[2]))
+            else:
+                self.open_term()
+        elif msg and msg[0] == "term-release":
+            self.focus_term(False)
+
     def tell_dock(self, msg: str):
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
                 s.sendto(msg.encode(), os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "sotto.sock"))
         except OSError:
             pass
+
+    def on_keys(self, s: str):
+        if not s:
+            return
+        if self.term_focused and self.term:
+            self.term.send(s.encode("utf-8", "surrogateescape"))    # the exact bytes kitty sent
+            return
+        for ch in s:
+            self.on_key(ch)
 
     def on_key(self, ch: str):
         if self.visible and ch in "123456":
@@ -264,18 +414,15 @@ class Wall:
     def read_input(self, buf: str) -> str:
         pos = 0
         for m in MOUSE.finditer(buf):
-            for ch in buf[pos:m.start()]:
-                self.on_key(ch)
+            self.on_keys(buf[pos:m.start()])
             self.on_mouse(int(m[1]), int(m[2]) - 1, int(m[3]) - 1, m[4] == "M")
             pos = m.end()
         rest = buf[pos:]
-        cut = rest.find("\x1b[")
-        if cut >= 0:                                 # keep a partial escape for the next read
-            for ch in rest[:cut]:
-                self.on_key(ch)
-            return rest[cut:]
-        for ch in rest:
-            self.on_key(ch)
+        half = HALF_MOUSE.search(rest)
+        if half:                                     # keep half a mouse report for the next read
+            self.on_keys(rest[:half.start()])
+            return rest[half.start():]
+        self.on_keys(rest)                           # keys (arrows, Esc...) go through right away
         return ""
 
     # ── main loop ─────────────────────────────────────────────────────────
@@ -309,11 +456,23 @@ class Wall:
             except (OSError, json.JSONDecodeError):
                 pass
 
+        if self.term:
+            if not self.term.alive:
+                self.close_term()                    # the shell exited
+            elif self.term_dirty and now - self.term_drawn >= 1 / FPS:
+                self.term_dirty, self.term_drawn = False, now
+                self.sync_modes()
+                self.present(self.compose(), only=self.term.cells(self.cols, self.rows) | set(self.trail))
+
         if self.fade:
             t = now - self.fade_t0
             frame = self.shown.copy()
             self.fade.apply(t, frame, self.fade_src)
-            self.present(frame, only=self.fade.plan.keys())
+            only = set(self.fade.plan.keys())
+            if self.term:
+                self.term.draw(frame, self.term_focused)     # the card stays on top
+                only |= self.term.cells(self.cols, self.rows)
+            self.present(frame, only=only)
             if t >= self.fade.end:
                 self.fade = None
             return
@@ -336,22 +495,47 @@ class Wall:
                 self.set_base(self.home(), animate=False)
 
     def timeout(self) -> float:
-        return 1 / FPS if (self.fade or self.trail) else 1.0
+        return 1 / FPS if (self.fade or self.trail or self.term_dirty or self.drag) else 1.0
 
     def run(self, fd: int):
         # any-motion mouse tracking stays on: motion only arrives when the pointer is over the bare desktop
         self.write("\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1003h\x1b[?1006h\x1b[48;2;236;226;208m\x1b[2J")
         self.show()
+        self.listen()
         pending = ""
         while True:
-            r, _, _ = select.select([fd], [], [], self.timeout())
-            if r:
+            fds = [fd] + ([self.sock] if self.sock else []) + ([self.term.master] if self.term else [])
+            r, _, _ = select.select(fds, [], [], self.timeout())
+            if fd in r:
                 try:
-                    data = os.read(fd, 4096).decode(errors="ignore")
+                    data = os.read(fd, 4096).decode(errors="surrogateescape")
                 except OSError:
                     data = ""
                 pending = self.read_input(pending + data)
+            if self.sock and self.sock in r:
+                try:
+                    self.on_command(self.sock.recv(256).decode(errors="ignore").split())
+                except OSError:
+                    pass
+            if self.term and self.term.master in r:
+                for _ in range(8):                   # a burst of output, but keep drawing
+                    if not self.term.read():
+                        break
+                self.term_dirty = True
             self.tick()
+
+    def listen(self):
+        try:
+            os.unlink(SOCKET)
+        except OSError:
+            pass
+        try:
+            self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+            self.sock.bind(SOCKET)
+            self.sock.setblocking(False)
+        except OSError:
+            self.sock = None
+            log_error()
 
 
 def log_error():
@@ -382,7 +566,13 @@ def run() -> int:
         log_error()
         raise
     finally:
-        wall.write("\x1b[?1003l\x1b[?1006l\x1b[?7h\x1b[?25h\x1b[0m\x1b[?1049l")
+        if wall.term:
+            wall.close_term()
+        try:
+            os.unlink(SOCKET)
+        except OSError:
+            pass
+        wall.write("\x1b[?1003l\x1b[?1006l\x1b[?1l\x1b[?2004l\x1b[?7h\x1b[?25h\x1b[0m\x1b[?1049l")
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
         try:
             os.unlink(PIDFILE)

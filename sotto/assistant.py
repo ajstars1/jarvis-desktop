@@ -28,6 +28,12 @@ WORKDIR = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "sotto" / "a
 CHEATSHEET = [HOME / ".config/hypr/cheatsheet.txt",                               # the live config
               Path(__file__).resolve().parent.parent / "dotfiles/hypr/cheatsheet.txt"]  # the repo's copy
 SHOW_SHORTCUTS = {"type": "cmd", "argv": [str(HOME / ".config/hypr/scripts/cheatsheet.sh")]}
+WALL_SOCKET = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "sotto-wall.sock")
+SLASH = {   # /commands typed in the prompt
+    "terminal": "a terminal inside the wallpaper: drag its top bar to move it, the corner to resize",
+    "help": "this list",
+}
+SLASH_ALIASES = {"term": "terminal", "t": "terminal", "shell": "terminal", "sh": "terminal", "?": "help"}
 APP_DIRS = [
     HOME / ".local/share/applications",
     HOME / ".local/share/flatpak/exports/share/applications",
@@ -64,7 +70,7 @@ ALIASES = {  # everyday words -> what to open
 
 HELP = ("Try: open blender · open youtube · play lofi on youtube · search best laptops · "
         "open downloads · open <a project> · how much ram · what time is it · lock · screenshot · "
-        "volume up · shortcuts · how do I snap windows. Anything else, just ask.")
+        "volume up · shortcuts · /terminal · how do I snap windows. Anything else, just ask.")
 
 # questions about this desktop, answered locally
 HOWTO = [
@@ -79,6 +85,8 @@ HOWTO = [
     (r"shut ?down|turn (it |the \w+ )?off|power (off|down)|restart|reboot|log ?out|sign out",
      "Click OFF at the top right, or press Super+Shift+E, for lock, log out, restart and shut down."),
     (r"screenshot|screen ?shot", "Press Print to pick an area or Shift+Print for the whole screen; it's copied and saved in Pictures/Screenshots. Or type screenshot here."),
+    (r"terminal (in|inside|on) (the )?wallpaper|embedded terminal|/terminal",
+     "Type /terminal here: a shell opens inside the wallpaper. Drag its top bar to move it, the corner to resize, × to close."),
     (r"wallpaper|this (box|prompt|thing)|what (is|are) you|who are you", "I'm the assistant on your wallpaper. Double-click anywhere on the wallpaper, type, and press Enter. Esc or a click elsewhere closes me."),
 ]
 
@@ -142,7 +150,8 @@ def shortcut_for(low: str):
     words = {_stem(w) for w in re.findall(r"[a-z]+", low) if w not in STOP and len(w) > 2}
     best, best_score, tied = None, 0, False
     for keys, desc in shortcuts():
-        dwords = {_stem(w) for w in re.findall(r"[a-z]+", desc.lower())}
+        main = re.sub(r"\(.*?\)", "", desc).lower()        # notes in brackets don't count
+        dwords = {_stem(w) for w in re.findall(r"[a-z]+", main)}
         strong = len((words - WEAK) & dwords)
         score = strong * 2 + len(words & WEAK & dwords)
         if strong and score > best_score:
@@ -328,6 +337,13 @@ def handle(text: str):
         return None
     is_question = raw.endswith("?") or re.match(r"^(how|what|where|why|when|which|who|can|is|are|do|does)\b", low)
 
+    if raw.startswith("/"):
+        word = raw[1:].split()[0].lower() if raw[1:].split() else "help"
+        cmd = SLASH_ALIASES.get(word, word)
+        if cmd == "terminal":
+            return reply("Opening a terminal in the wallpaper.", {"type": "wallterm"})
+        listing = " · ".join(f"/{k}: {v}" for k, v in SLASH.items())
+        return reply(listing if cmd == "help" else f"There's no /{word}. Try: {listing}")
     if low in ("help", "?", "commands", "what can you do", "what can i do", "what can i ask"):
         return reply(HELP)
     if is_question:
@@ -455,8 +471,21 @@ def run_action(action, launch_app=None):
         if launch_app and launch_app(action["id"]):
             return
         hypr_exec("gtk-launch " + _q(action["id"].removesuffix(".desktop")))
+    elif kind == "wallterm":
+        x, y = action.get("x"), action.get("y")
+        tell_wall("term" + (f" {x} {y}" if x is not None and y is not None else ""))
     elif kind == "cmd":
         subprocess.Popen(action["argv"], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def tell_wall(msg: str):
+    """Send the wallpaper a command (it listens on its own socket)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
+            s.sendto(msg.encode(), WALL_SOCKET)
+    except OSError:
+        pass
 
 
 def _q(s: str) -> str:

@@ -5,6 +5,7 @@ description = "A wallpaper that speaks softly: a living, data-driven Hyprland wa
 requires-python = ">=3.12"
 dependencies = [
     "pillow>=12.3.0",
+    "pyte>=0.8.2",
 ]
 
 [project.optional-dependencies]

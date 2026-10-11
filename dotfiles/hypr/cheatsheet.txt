@@ -29,7 +29,7 @@ SUPER + F1               this list
 PRINT                    screenshot an area
 SHIFT + PRINT            screenshot the whole screen
 SUPER + DRAG             move a window (left button) / resize it (right button)
-DOUBLE-CLICK WALLPAPER   ask the wallpaper assistant
+DOUBLE-CLICK WALLPAPER   ask the wallpaper assistant (/terminal: a shell inside the wallpaper)
 RIGHT-CLICK WALLPAPER    desktop menu
 DRAG A TITLE BAR         to an edge to snap: half, quarter, top to maximize
 DOUBLE-CLICK TITLE BAR   maximize / restore

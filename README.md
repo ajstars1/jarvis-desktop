@@ -44,6 +44,7 @@ Most requests never leave your computer. They're understood locally and happen i
 | `lock` · `screenshot` · `volume up` · `mute` | does it |
 | `how do I snap windows?` · `how do I minimize?` · `help` | explains this desktop |
 | `shortcuts` · `how do I open a terminal?` · `which key opens the browser?` | the keyboard shortcuts, from the same list `Super+F1` shows (it opens that list too) |
+| `/terminal` | a real shell **inside the wallpaper**, right where you double-clicked (see below) |
 
 **Real questions** ("what is a fresco?", "how does git rebase work?") go to **Claude Haiku** through your Claude Code login and come back in two or three sentences (about 3–6 s):
 - It runs as `claude -p` with **no tools, no MCP servers and no saved session**.
@@ -55,6 +56,15 @@ It behaves like a popup:
 - While you type, it holds the keyboard.
 - Esc, a click anywhere else, or switching windows closes it.
 - After Enter it gives the keyboard straight back. Click the answer to ask something new.
+
+### A terminal inside the wallpaper
+
+Type `/terminal` in the prompt and your shell opens as a card drawn into the wallpaper itself, in its font and colours. It stays under your windows like the rest of the wallpaper.
+- Drag its top bar to move it, the corner to resize it, × (or `exit`) to close it. The wheel scrolls back through its history.
+- Click it to type in it. A click anywhere else, Alt+Tab or a top-bar click gives the keyboard back to your windows, and the window you clicked gets it straight away.
+- Shift+drag selects text, Ctrl+Shift+C and Ctrl+Shift+V copy and paste.
+
+The wallpaper is itself a terminal (kitty), so this is a terminal inside a terminal: [`sotto/term.py`](sotto/term.py) runs your shell in a pty, [pyte](https://github.com/selectel/pyte) keeps its screen, and the wall draws it. To take the keyboard, the wallpaper asks its own kitty through remote control, on a socket in `$XDG_RUNTIME_DIR` that only you can reach. kitty's own shortcuts are turned off in the wallpaper, so Ctrl+Shift+W can't close it.
 
 Try the brain from a terminal: `python -m sotto ask "open youtube"` (add `--do` to actually do it). New commands are a pattern and an action in [`sotto/assistant.py`](sotto/assistant.py).
 
@@ -115,6 +125,7 @@ open = ["kitty --directory {path}", "kitty --directory {path} -e npm run dev"]
 | [`sotto/wall.py`](sotto/wall.py) | the wallpaper: watches `state.json` and the `say` inbox, re-assembles only changed cells, dot trail, clicks, and the double-click that opens the prompt |
 | [`sotto/assistant.py`](sotto/assistant.py) | the prompt's brain: local intents first, Claude only for real questions, a whitelist of safe actions |
 | [`sotto/dock.py`](sotto/dock.py) | GTK4 + gtk4-layer-shell: the dock, the Apps list, the wallpaper prompt, and the snap preview outline. It notes which app has focus, so the Apps list knows when you last used each one (`~/.cache/sotto/app-usage.json`; before that it uses GNOME's record). |
+| [`sotto/term.py`](sotto/term.py) | the terminal inside the wallpaper: your shell in a pty, its screen kept by pyte and drawn by the wall as a card |
 | [`sotto/bootsplash.py`](sotto/bootsplash.py) | draws the boot screen as a Plymouth script theme. Plymouth starts before your fonts are available, so all the text is drawn into PNGs. |
 | [`dotfiles/hypr/scripts/`](dotfiles/hypr/scripts/) | the desktop behaviour Hyprland doesn't have: snapping (`snap.py` notices a drag by a window moving exactly with the cursor), minimize, maximize, show desktop, top-bar clicks |
 
@@ -125,6 +136,7 @@ open = ["kitty --directory {path}", "kitty --directory {path} -e npm run dev"]
 - One monitor so far.
 - Snapping happens when the drag pauses at an edge, because Hyprland doesn't report the mouse release during title-bar drags.
 - Hyprland has no built-in minimize, so minimized windows live on a hidden workspace.
+- The terminal inside the wallpaper is emulated by pyte: shells, git, ssh and most full-screen programs work, but programs can't use the mouse there or show images. One at a time.
 
 ## License
 

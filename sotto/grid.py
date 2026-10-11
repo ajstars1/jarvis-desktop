@@ -1,5 +1,6 @@
 """A character grid shared by both outputs: ANSI escape codes for the live
-wallpaper in kitty, and a PNG for previews."""
+wallpaper in kitty, and a PNG for previews. A colour is a palette name or,
+for the terminal card's programs, a "#rrggbb" string."""
 
 PALETTE = {
     # fresco light palette, from the old ceiling-painting wallpaper
@@ -12,8 +13,28 @@ PALETTE = {
     "accent": (0xA7, 0x78, 0x3F),    # ochre accent
     "alert": (0xA9, 0x53, 0x2F),     # terracotta
 }
-SGR_FG = {k: f"\x1b[38;2;{r};{g};{b}m" for k, (r, g, b) in PALETTE.items()}
-SGR_BG = {k: f"\x1b[48;2;{r};{g};{b}m" for k, (r, g, b) in PALETTE.items()}
+
+
+def rgb(color: str) -> tuple[int, int, int]:
+    if color in PALETTE:
+        return PALETTE[color]
+    return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+
+
+class _SGR(dict):
+    """Escape code per colour, built the first time a colour is used."""
+
+    def __init__(self, code: int):
+        super().__init__()
+        self.code = code
+
+    def __missing__(self, color: str) -> str:
+        r, g, b = rgb(color)
+        self[color] = f"\x1b[{self.code};2;{r};{g};{b}m"
+        return self[color]
+
+
+SGR_FG, SGR_BG = _SGR(38), _SGR(48)
 
 BOX = {"tl": "┌", "tr": "┐", "bl": "└", "br": "┘", "h": "─", "v": "│"}
 
@@ -81,6 +102,9 @@ def ansi_diff(prev: Grid | None, cur: Grid, only=None) -> str:
         c, f, b = cur.ch[i], cur.fg[i], cur.bg[i]
         if prev is not None and prev.ch[i] == c and prev.fg[i] == f and prev.bg[i] == b:
             continue
+        if c == "":                      # right half of a wide character: drawn with its left half
+            cursor = -1
+            continue
         if cursor != i:
             y, x = divmod(i, cols)
             out.append(f"\x1b[{y + 1};{x + 1}H")
@@ -111,10 +135,10 @@ def to_png(grid: Grid, path: str, font_path: str, cw: int = 7, chh: int = 14):
     for i, c in enumerate(grid.ch):
         y, x = divmod(i, grid.cols)
         px, py = x * cw, y * chh
-        fg, bg = PALETTE[grid.fg[i]], PALETTE[grid.bg[i]]
+        fg, bg = rgb(grid.fg[i]), rgb(grid.bg[i])
         if grid.bg[i] != "bg":
             d.rectangle([px, py, px + cw - 1, py + chh - 1], fill=bg)
-        if c == " ":
+        if c in (" ", ""):
             continue
         if c == "█":
             d.rectangle([px, py, px + cw - 1, py + chh - 1], fill=fg)

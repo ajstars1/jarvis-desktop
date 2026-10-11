@@ -10,6 +10,8 @@
   Quit, Dock Settings…
 - Dock Settings: pick, order and remove apps, icon size, auto-hide
 - Apps: a floating list of every app, with when you last used it
+- while the terminal inside the wallpaper has the keyboard, a click anywhere
+  else gives it back (an invisible layer catches that click)
 
 Settings live in ~/.config/sotto/dock.json. Runs with the system python3
 (python3-gi); bin/sotto-dock preloads libgtk4-layer-shell as GTK requires.
@@ -104,6 +106,7 @@ popover button:hover { background: #e2d4bd; }
 popover .title { font-weight: bold; padding: 4px 10px 6px 10px; }
 popover separator { background: #cdb99b; margin: 4px 6px; }
 window.drawer-window { background: rgba(61, 44, 31, 0.08); }
+window.catcher-window { background: transparent; }
 .drawer {
     background: #f3ebde;
     border: 1px solid #cdb99b;
@@ -323,6 +326,7 @@ class Dock(Gtk.Application):
         self.make_preview()
         self.make_prompt()
         self.make_drawer()
+        self.make_term_catcher()
         self.refresh_running()
         threading.Thread(target=self.listen, daemon=True).start()
         if self.cfg["autohide"]:
@@ -371,6 +375,13 @@ class Dock(Gtk.Application):
             return False
         if msg and msg[0] == "prompt" and len(msg) == 3:
             self.open_prompt(int(msg[1]), int(msg[2]))
+            return False
+        if msg and msg[0] == "term-on" and len(msg) == 5:
+            self.show_term_catcher(*(int(v) for v in msg[1:]))
+            return False
+        if msg and msg[0] == "term-off":
+            if self.term_catcher:
+                self.term_catcher.set_visible(False)
             return False
         if msg and msg[0] == "prompt-close":
             self.close_prompt()
@@ -496,6 +507,7 @@ class Dock(Gtk.Application):
     def open_prompt(self, x: int, y: int):
         if not self.prompt:
             return
+        self.prompt_origin = (x, y)          # where the wallpaper was double-clicked (screen pixels)
         geo = Gdk.Display.get_default().get_monitors().get_item(0).get_geometry()
         try:
             top = json.loads(hypr("monitors", "-j") or "[]")[0]["reserved"][1]
@@ -508,6 +520,8 @@ class Dock(Gtk.Application):
 
     def reask(self):
         """Ready for a (new) question: empty line, keyboard held while typing."""
+        if self.term_catcher and self.term_catcher.get_visible():
+            self.release_term()
         self.stop_anim()
         self.prompt_done = False
         self.prompt_entry.set_editable(True)
@@ -548,6 +562,9 @@ class Dock(Gtk.Application):
             self.close_prompt()
         if self.drawer and self.drawer.get_visible() and GLib.get_monotonic_time() - self.drawer_opened > 400_000:
             self.close_drawer()
+        if (self.term_catcher and self.term_catcher.get_visible()
+                and GLib.get_monotonic_time() - self.term_on_at > 600_000):
+            self.release_term()                     # Alt+Tab or a top-bar click: the window gets the keys
         return False
 
     def on_prompt_key(self, _ctrl, keyval, _code, _state):
@@ -574,6 +591,11 @@ class Dock(Gtk.Application):
         LS.set_keyboard_mode(self.prompt, LS.KeyboardMode.NONE)   # hand the keyboard straight back
         self.set_prompt_input(box_only=True)                       # and stop catching clicks elsewhere
         local = assistant.handle(text)
+        if local and local["action"] and local["action"]["type"] == "wallterm":
+            self.close_prompt()                                    # the terminal opens right here
+            x, y = getattr(self, "prompt_origin", (None, None))
+            assistant.run_action(dict(local["action"], x=x, y=y))
+            return
         if local:
             self.show_reply(local["reply"])
             assistant.run_action(local["action"], self.launch_app_id)
@@ -630,6 +652,73 @@ class Dock(Gtk.Application):
         self.prompt_reply.set_text("")
         self.prompt_anim = GLib.timeout_add(14, tick)
 
+    # ── the terminal inside the wallpaper ─────────────────────────────────
+    # The wallpaper takes the keyboard while you use its terminal. Hyprland then
+    # won't move focus on a click elsewhere, so this invisible layer covers
+    # everything except the terminal card: a click on it gives the keyboard back.
+    def make_term_catcher(self):
+        self.term_catcher = None
+        if not LS or cairo is None:
+            return
+        w = Gtk.Window(application=self)
+        w.add_css_class("catcher-window")
+        click = Gtk.GestureClick()
+        click.connect("pressed", lambda *_: self.release_term(focus_pointer=True))
+        w.add_controller(click)
+        LS.init_for_window(w)
+        LS.set_namespace(w, "sotto-term-catcher")
+        LS.set_layer(w, LS.Layer.TOP)
+        for e in (LS.Edge.TOP, LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
+            LS.set_anchor(w, e, True)
+        LS.set_exclusive_zone(w, 0)              # below the top bar, which keeps working
+        LS.set_keyboard_mode(w, LS.KeyboardMode.NONE)
+        self.term_catcher = w
+        self.term_on_at = 0
+
+    def show_term_catcher(self, x: int, y: int, w: int, h: int):
+        if not self.term_catcher:
+            return
+        try:
+            top = json.loads(hypr("monitors", "-j") or "[]")[0]["reserved"][1]
+        except (IndexError, KeyError, json.JSONDecodeError):
+            top = 26
+        self.term_catcher.set_visible(True)
+        self.term_catcher.present()
+        surf = self.term_catcher.get_surface()
+        if surf is None:
+            return
+        self.term_on_at = GLib.get_monotonic_time()
+        try:
+            region = cairo.Region(cairo.RectangleInt(0, 0, 10000, 10000))
+            region.subtract(cairo.RectangleInt(x, y - top, w, h))   # the card itself stays clickable...
+            ws = json.loads(hypr("activeworkspace", "-j") or "{}").get("id")
+            for c in clients():                                       # ...except where a window covers it
+                if c["workspace"]["id"] == ws:
+                    (cx, cy), (cw, chh) = c["at"], c["size"]
+                    region.union(cairo.RectangleInt(cx, cy - top, cw, chh))
+            surf.set_input_region(region)
+        except Exception:
+            pass
+
+    def release_term(self, focus_pointer: bool = False):
+        if self.term_catcher:
+            self.term_catcher.set_visible(False)
+        assistant.tell_wall("term-release")
+        if focus_pointer:      # the window you clicked gets the keyboard, once the wallpaper lets go
+            GLib.timeout_add(150, self.focus_window_under_pointer)
+
+    def focus_window_under_pointer(self):
+        try:
+            x, y = (int(v) for v in hypr("cursorpos").split(","))
+            ws = json.loads(hypr("activeworkspace", "-j") or "{}").get("id")
+        except (ValueError, json.JSONDecodeError):
+            return False
+        under = [c for c in clients() if c["workspace"]["id"] == ws
+                 and c["at"][0] <= x < c["at"][0] + c["size"][0] and c["at"][1] <= y < c["at"][1] + c["size"][1]]
+        if under:
+            focus_window(min(under, key=lambda c: c.get("focusHistoryID", 99)))   # the one on top
+        return False
+
     # ── Apps: a floating list of every app ────────────────────────────────
     # Same trick as the prompt: a transparent full-screen layer (below the top bar)
     # holds the keyboard while open; a click outside the list or a focus change closes it.
@@ -685,6 +774,8 @@ class Dock(Gtk.Application):
 
     def open_drawer(self):
         self.close_prompt()
+        if self.term_catcher and self.term_catcher.get_visible():
+            self.release_term()
         try:
             mon_h = json.loads(hypr("monitors", "-j") or "[]")[0]["height"]
         except (IndexError, KeyError, json.JSONDecodeError):
