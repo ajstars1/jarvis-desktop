@@ -28,7 +28,7 @@ SUPER + SHIFT + R        reload the desktop config
 SUPER + F1               this list
 PRINT                    screenshot an area
 SHIFT + PRINT            screenshot the whole screen
-CTRL + PRINT             record an area with sound (press again, or click REC in the bar, to stop)
+CTRL + PRINT             record an area with sound and mic (press again, or click REC in the bar, to stop)
 CTRL + SHIFT + PRINT     record the whole screen
 SUPER + DRAG             move a window (left button) / resize it (right button)
 DOUBLE-CLICK WALLPAPER   ask the wallpaper assistant (/terminal: a shell inside the wallpaper)
