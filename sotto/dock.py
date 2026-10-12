@@ -34,6 +34,10 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 
+# sotto-dock preloads gtk4-layer-shell for this process only; apps opened from
+# the dock must not inherit it (it breaks GTK3 apps such as waybar).
+os.environ.pop("LD_PRELOAD", None)
+
 try:
     gi.require_foreign("cairo")       # needs python3-gi-cairo; without it, clicks after an answer close the prompt
     import cairo  # noqa: E402
