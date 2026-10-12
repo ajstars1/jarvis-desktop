@@ -109,6 +109,12 @@ tooltip label {
     color: #a9532f;
 }
 
+/* screen recording: the button only shows while recording */
+#custom-rec.recording {
+    padding: 0 10px;
+    color: #a9532f;
+}
+
 /* ── dock ─────────────────────────────────────────────────────────── */
 window#waybar.dock {
     background: transparent;

@@ -18,6 +18,7 @@
       "network",
       "pulseaudio",
       "tray",
+      "custom/rec",
       "clock",
       "custom/power",
       "custom/desktop"
@@ -93,6 +94,13 @@
           "today": "<span background='#3d2c1f' color='#ece2d0'><b>{}</b></span>"
         }
       }
+    },
+    "custom/rec": {
+      "exec": "~/.config/hypr/scripts/record.sh status",
+      "return-type": "json",
+      "interval": "once",
+      "signal": 9,
+      "on-click": "~/.config/hypr/scripts/record.sh toggle"
     },
     "custom/power": {
       "format": "OFF",
