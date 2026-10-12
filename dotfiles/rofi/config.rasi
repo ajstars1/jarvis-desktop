@@ -7,6 +7,10 @@ configuration {
     drun-display-format: "{name}";
     matching: "fuzzy";
     sort: true;
+    /* one click opens a row (rofi's default is double-click); rows highlight under the mouse */
+    hover-select: true;
+    me-select-entry: "";
+    me-accept-entry: [ MousePrimary, MouseSecondary, MouseDPrimary ];
 }
 
 @theme "fresco"
